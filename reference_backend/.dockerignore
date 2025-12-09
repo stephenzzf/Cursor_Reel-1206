@@ -1,0 +1,67 @@
+# 环境变量文件（不应包含在镜像中）
+.env
+backend/.env
+frontend/.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+*.egg-info/
+.pytest_cache/
+
+# Node.js
+node_modules/
+frontend/node_modules/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 构建产物（会在 Docker 中构建）
+frontend/dist/
+frontend/build/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 临时文件
+temp/
+*.tmp
+*.bak
+*.swp
+
+# 日志文件
+*.log
+backend/*.log
+frontend/*.log
+
+# Git
+.git/
+.gitignore
+
+# 文档和测试文件（可选，根据需要调整）
+# *.md
+# tests/
+# test/
+
+# 压缩文件
+*.zip
+*.tar.gz
+
+# 其他
+aideaglo.ai---image.zip
+

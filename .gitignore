@@ -1,0 +1,46 @@
+# Firebase 凭证文件
+serviceAccountKey.json
+*-firebase-adminsdk-*.json
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 环境变量
+.env
+.env.local
+.env.*.local
+
+# 日志文件
+*.log
+*.log.*
+
+# 系统文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 测试报告和临时文件
+test/*_report.json
+test/*_REPORT.md
+*.tmp
+*.bak
+
+# 构建产物
+dist/
+build/
+*.egg-info/

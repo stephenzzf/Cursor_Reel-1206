@@ -1,0 +1,54 @@
+# Google Cloud Build 配置文件
+# 用于自定义构建流程（可选）
+# 如果使用 Cloud Run 的默认构建，此文件不是必需的
+
+steps:
+  # 构建 Docker 镜像
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$SHORT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
+      - '.'
+    id: 'build-image'
+
+  # 推送镜像到 Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$SHORT_SHA'
+    id: 'push-image-sha'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
+    id: 'push-image-latest'
+
+  # 部署到 Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_SERVICE_NAME}'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$SHORT_SHA'
+      - '--region'
+      - '${_REGION}'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+    id: 'deploy-cloud-run'
+
+# 替换变量说明：
+# - ${_SERVICE_NAME}: Cloud Run 服务名称（需要在 Cloud Build 触发器中设置）
+# - ${_REGION}: 部署区域（例如：us-central1）
+# - $PROJECT_ID: GCP 项目 ID（自动提供）
+# - $SHORT_SHA: Git commit SHA（自动提供）
+
+# 注意：如果使用 Cloud Run 的持续部署功能，通常不需要此文件
+# Cloud Run 会自动处理构建和部署流程
+
