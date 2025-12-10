@@ -469,8 +469,15 @@ def generate():
                 print(f"[API] ❌ Error: API Key is missing")
                 return jsonify({"error": "API Key is missing"}), 500
             
-            actual_model = 'veo-3.1-generate-preview'
-            print(f"[API] Using Veo model: {actual_model}")
+            # 模型映射：veo_fast 使用 fast 模型，veo_gen 使用标准模型
+            if model == 'veo_fast':
+                actual_model = 'veo-3.1-fast-generate-preview'
+            elif model == 'veo_gen':
+                actual_model = 'veo-3.1-generate-preview'
+            else:
+                # 默认使用 fast 模型
+                actual_model = 'veo-3.1-fast-generate-preview'
+            print(f"[API] Using Veo model: {actual_model} (requested: {model})")
             
             try:
                 client = genai_new.Client(api_key=api_key)
@@ -575,15 +582,54 @@ def generate():
             # 获取生成的视频
             if hasattr(operation, 'error') and operation.error:
                 print(f"[API] ❌ Video generation error: {operation.error}")
+                import traceback
+                traceback.print_exc()
                 return jsonify({"error": f"Video generation failed: {operation.error}"}), 500
+            
+            # 增强调试：打印操作对象的结构
+            print(f"[API] 🔍 Debug: operation type = {type(operation)}")
+            print(f"[API] 🔍 Debug: hasattr(operation, 'response') = {hasattr(operation, 'response')}")
+            if hasattr(operation, 'response'):
+                print(f"[API] 🔍 Debug: operation.response type = {type(operation.response)}")
+                print(f"[API] 🔍 Debug: operation.response = {str(operation.response)[:500]}")
+            if hasattr(operation, 'done'):
+                print(f"[API] 🔍 Debug: operation.done = {operation.done}")
+            if hasattr(operation, 'name'):
+                print(f"[API] 🔍 Debug: operation.name = {operation.name}")
             
             if not hasattr(operation, 'response') or not operation.response:
                 print(f"[API] ❌ No response from video generation")
+                print(f"[API] 🔍 Available attributes: {dir(operation)}")
                 return jsonify({"error": "No response from video generation"}), 500
             
-            generated_videos = operation.response.generated_videos
+            # 尝试不同的响应结构
+            generated_videos = None
+            if hasattr(operation.response, 'generated_videos'):
+                generated_videos = operation.response.generated_videos
+                print(f"[API] 🔍 Found generated_videos attribute")
+            elif hasattr(operation.response, 'videos'):
+                generated_videos = operation.response.videos
+                print(f"[API] 🔍 Found videos attribute (using as fallback)")
+            elif hasattr(operation, 'response') and isinstance(operation.response, dict):
+                generated_videos = operation.response.get('generated_videos') or operation.response.get('videos')
+                print(f"[API] 🔍 Response is dict, looking for generated_videos/videos")
+            else:
+                # 尝试直接访问响应内容
+                try:
+                    response_dict = operation.response.__dict__ if hasattr(operation.response, '__dict__') else {}
+                    print(f"[API] 🔍 Response dict keys: {list(response_dict.keys()) if response_dict else 'None'}")
+                    if 'generated_videos' in response_dict:
+                        generated_videos = response_dict['generated_videos']
+                    elif 'videos' in response_dict:
+                        generated_videos = response_dict['videos']
+                except Exception as e:
+                    print(f"[API] ⚠️ Could not inspect response structure: {e}")
+            
             if not generated_videos or len(generated_videos) == 0:
                 print(f"[API] ❌ No videos generated in response")
+                print(f"[API] 🔍 Response structure details:")
+                print(f"  - response type: {type(operation.response)}")
+                print(f"  - response attributes: {[attr for attr in dir(operation.response) if not attr.startswith('_')]}")
                 return jsonify({"error": "No videos generated"}), 500
             
             video = generated_videos[0].video
