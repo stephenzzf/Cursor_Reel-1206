@@ -5,6 +5,7 @@ Reel Generation 路由
 
 from flask import Blueprint, request, jsonify
 from services.gemini_service import get_gemini_service_safe
+from services.video_asset_service import get_video_asset_service
 from utils.auth import verify_firebase_token
 import json
 import base64
@@ -488,9 +489,13 @@ def generate():
                 traceback.print_exc()
                 return jsonify({"error": f"Failed to initialize SDK client: {str(e)}"}), 500
             
-            # 处理图片输入
+            # 处理图片输入 - 需要上传到 Firebase Storage 获取 GCS URI
             base_interpol_image = None
             last_frame_image = None
+            doc_ref = None  # 用于追踪资源状态
+            
+            # 获取 VideoAssetService 实例
+            asset_service = get_video_asset_service()
             
             if images and len(images) > 0:
                 print(f"[API] Processing {len(images)} input image(s)")
@@ -504,14 +509,40 @@ def generate():
                     print(f"[API] ⚠️ Error decoding base image: {e}")
                     image_bytes = base64.b64decode(image_data_str) if isinstance(image_data_str, str) else image_data_str
                 
-                base_interpol_image = types.Image(
-                    image_bytes=image_bytes,
-                    mime_type=image_mime_type
-                )
+                # 上传到 Firebase Storage 并获取 GCS URI
+                first_gcs_uri = None
+                try:
+                    doc_ref, _, first_gcs_uri = asset_service.archive_and_prepare_reference(
+                        image_bytes,
+                        image_mime_type,
+                        prompt
+                    )
+                    if first_gcs_uri:
+                        print(f"[API] ✅ Image uploaded to Firebase Storage")
+                        print(f"[API] GCS URI: {first_gcs_uri}")
+                    else:
+                        print(f"[API] ⚠️ Failed to get GCS URI, using fallback")
+                except Exception as e:
+                    print(f"[API] ⚠️ Failed to upload image to Firebase Storage: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    first_gcs_uri = None
                 
-                # 处理尾帧
+                # 使用 GCS URI 创建图片对象（推荐）或使用 bytes（fallback）
+                if first_gcs_uri:
+                    base_interpol_image = types.Image(gcs_uri=first_gcs_uri)
+                    print(f"[API] ✅ Using GCS URI for base image")
+                else:
+                    # Fallback: 使用直接 bytes（可能不支持或效果不佳）
+                    print(f"[API] ⚠️ Using direct image_bytes (fallback)")
+                    base_interpol_image = types.Image(
+                        image_bytes=image_bytes,
+                        mime_type=image_mime_type
+                    )
+                
+                # 处理尾帧（首尾帧插值）
                 if len(images) >= 2:
-                    print(f"[API] Processing last frame image")
+                    print(f"[API] Processing last frame image for interpolation")
                     last_frame_data_str = images[1]['data']
                     last_frame_mime_type = images[1].get('mimeType', 'image/jpeg')
                     try:
@@ -521,10 +552,32 @@ def generate():
                         print(f"[API] ⚠️ Error decoding last frame: {e}")
                         last_frame_bytes = base64.b64decode(last_frame_data_str) if isinstance(last_frame_data_str, str) else last_frame_data_str
                     
-                    last_frame_image = types.Image(
-                        image_bytes=last_frame_bytes,
-                        mime_type=last_frame_mime_type
-                    )
+                    # 上传尾帧到 Firebase Storage
+                    last_frame_gcs_uri = None
+                    try:
+                        _, _, last_frame_gcs_uri = asset_service.archive_and_prepare_reference(
+                            last_frame_bytes,
+                            last_frame_mime_type,
+                            f"{prompt} (Last Frame)"
+                        )
+                        if last_frame_gcs_uri:
+                            print(f"[API] ✅ Last frame uploaded to Firebase Storage")
+                            print(f"[API] Last Frame GCS URI: {last_frame_gcs_uri}")
+                    except Exception as e:
+                        print(f"[API] ⚠️ Failed to upload last frame to Firebase Storage: {e}")
+                        last_frame_gcs_uri = None
+                    
+                    # 使用 GCS URI 创建尾帧图片对象
+                    if last_frame_gcs_uri:
+                        last_frame_image = types.Image(gcs_uri=last_frame_gcs_uri)
+                        print(f"[API] ✅ Using GCS URI for last frame")
+                    else:
+                        # Fallback
+                        print(f"[API] ⚠️ Using direct image_bytes for last frame (fallback)")
+                        last_frame_image = types.Image(
+                            image_bytes=last_frame_bytes,
+                            mime_type=last_frame_mime_type
+                        )
             else:
                 print(f"[API] No input images, generating from text prompt only")
             
@@ -535,8 +588,10 @@ def generate():
                 negativePrompt='',
             )
             
+            # 设置尾帧（如果存在）
             if last_frame_image:
                 config.last_frame = last_frame_image
+                print(f"[API] ✅ Start/End Frame interpolation enabled")
             
             try:
                 print(f"[API] 🚀 Starting video generation...")
@@ -557,10 +612,14 @@ def generate():
                     )
                 print(f"[API] ✅ Video generation operation started")
             except Exception as e:
-                print(f"[API] ❌ Failed to start video generation: {e}")
+                error_msg = f"Failed to start video generation: {str(e)}"
+                print(f"[API] ❌ {error_msg}")
                 import traceback
                 traceback.print_exc()
-                return jsonify({"error": f"Failed to start video generation: {str(e)}"}), 500
+                # 更新资源状态为失败
+                if doc_ref:
+                    asset_service.update_asset_status(doc_ref, "failed", error=error_msg)
+                return jsonify({"error": error_msg}), 500
             
             # 轮询操作直到完成
             print(f"[API] ⏳ Polling operation status...")
@@ -626,11 +685,15 @@ def generate():
                     print(f"[API] ⚠️ Could not inspect response structure: {e}")
             
             if not generated_videos or len(generated_videos) == 0:
-                print(f"[API] ❌ No videos generated in response")
+                error_msg = "No videos generated in response"
+                print(f"[API] ❌ {error_msg}")
                 print(f"[API] 🔍 Response structure details:")
                 print(f"  - response type: {type(operation.response)}")
                 print(f"  - response attributes: {[attr for attr in dir(operation.response) if not attr.startswith('_')]}")
-                return jsonify({"error": "No videos generated"}), 500
+                # 更新资源状态为失败
+                if doc_ref:
+                    asset_service.update_asset_status(doc_ref, "failed", error=error_msg)
+                return jsonify({"error": error_msg}), 500
             
             video = generated_videos[0].video
             video_uri = video.uri if hasattr(video, 'uri') else (video.url if hasattr(video, 'url') else str(video))
@@ -664,6 +727,11 @@ def generate():
             print(f"[API] ✅ Video generation completed successfully")
             print(f"[API] Asset ID: {asset_id}")
             print(f"[API] Duration: {duration:.2f}s")
+            
+            # 更新资源状态为成功
+            if doc_ref:
+                asset_service.update_asset_status(doc_ref, "completed", video_uri=final_video_uri)
+            
             print(f"{'='*60}\n")
             return jsonify({
                 "assetId": asset_id,
