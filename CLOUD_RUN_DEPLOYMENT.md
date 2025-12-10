@@ -147,19 +147,24 @@ gcloud services enable secretmanager.googleapis.com  # 如果使用 Secret Manag
    值: [您的 Firebase Storage Bucket，例如：ethereal-shine-436906-r5.appspot.com]
    ```
 
-   **Firebase 凭证配置**（二选一）：
-
-   **选项 1: 使用 JSON 字符串**
+   **Firebase 凭证配置**：
+   
+   ⚠️ **重要**: 详细的 Firebase 凭证配置指南请参考 [FIREBASE_CLOUD_RUN_SETUP.md](./FIREBASE_CLOUD_RUN_SETUP.md)
+   
+   **快速配置（使用 Secret Manager，推荐）**：
+   ```bash
+   # 运行自动化脚本
+   ./scripts/setup_firebase_secret.sh
    ```
-   名称: FIREBASE_CREDENTIALS_JSON
-   值: [完整的 Firebase Service Account JSON 字符串]
-   ```
-
-   **选项 2: 使用文件路径**（需要将文件添加到镜像中，不推荐）
-   ```
-   名称: FIREBASE_CREDENTIALS_PATH
-   值: /app/firebase-credentials.json
-   ```
+   
+   或手动配置：
+   - 在 "Variables & Secrets" 部分，点击 **"REFERENCE A SECRET"**
+   - 选择 Secret: `firebase-credentials-json`
+   - 变量名: `FIREBASE_CREDENTIALS_JSON`
+   
+   **其他选项**（详见 FIREBASE_CLOUD_RUN_SETUP.md）：
+   - 使用环境变量 `FIREBASE_CREDENTIALS_JSON`（不推荐用于生产）
+   - 使用文件路径 `FIREBASE_CREDENTIALS_PATH`（不推荐）
 
 #### 方式 B: 使用 Secret Manager（推荐用于敏感信息）
 
@@ -171,8 +176,12 @@ gcloud services enable secretmanager.googleapis.com  # 如果使用 Secret Manag
    echo -n "your-gemini-api-key" | gcloud secrets create gemini-api-key --data-file=-
    
    # 创建 Firebase 凭证 Secret
+   # 详细步骤请参考: FIREBASE_CLOUD_RUN_SETUP.md
    cat backend/ethereal-shine-436906-r5-firebase-adminsdk-fbsvc-2e401b6388.json | \
      gcloud secrets create firebase-credentials-json --data-file=-
+   
+   # 或使用自动化脚本
+   ./scripts/setup_firebase_secret.sh
    ```
 
    或在 [Secret Manager Console](https://console.cloud.google.com/security/secret-manager) 中：
