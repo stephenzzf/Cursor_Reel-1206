@@ -2,21 +2,54 @@
  * Image Generation Assets - 图片生成相关图标和组件
  */
 
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+
+// --- UTILS ---
+export const getClosestAspectRatio = (width: number, height: number): string => {
+    const ratio = width / height;
+    const supportedRatios = [
+        { str: '1:1', val: 1 },
+        { str: '16:9', val: 16 / 9 },
+        { str: '9:16', val: 9 / 16 },
+        { str: '4:3', val: 4 / 3 },
+        { str: '3:4', val: 3 / 4 },
+        { str: '4:5', val: 0.8 },
+    ];
+    const closest = supportedRatios.reduce((prev, curr) => {
+        return (Math.abs(curr.val - ratio) < Math.abs(prev.val - ratio) ? curr : prev);
+    });
+    return closest.str;
+};
+
+export const parseAspectRatioFromPrompt = (prompt: string): string | null => {
+    const p = prompt.toLowerCase();
+    // Explicit ratios
+    if (p.includes('16:9')) return '16:9';
+    if (p.includes('9:16')) return '9:16';
+    if (p.includes('4:3')) return '4:3';
+    if (p.includes('3:4')) return '3:4';
+    if (p.includes('1:1')) return '1:1';
+    if (p.includes('4:5')) return '4:5';
+    // Semantic keywords (Chinese/English)
+    if (p.includes('横屏') || p.includes('横向') || p.includes('landscape') || p.includes('wide')) return '16:9';
+    if (p.includes('竖屏') || p.includes('竖向') || p.includes('portrait') || p.includes('vertical')) return '9:16';
+    if (p.includes('正方形') || p.includes('square')) return '1:1';
+    return null;
+};
 
 // --- ICONS ---
 export const AIAvatarIcon: React.FC<{ className?: string, isThinking?: boolean }> = ({ className, isThinking }) => {
     if (!isThinking) {
         return (
-            <div className={`relative w-8 h-8 rounded-lg bg-white flex items-center justify-center border-2 border-blue-500 ${className}`}>
-                <span className="font-bold text-lg text-blue-500 leading-none">M</span>
+            <div className={`relative w-8 h-8 rounded-lg bg-white flex items-center justify-center border-2 border-indigo-500 ${className}`}>
+                <span className="font-bold text-lg text-indigo-500 leading-none">M</span>
             </div>
         );
     }
     return (
         <div className={`relative w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shadow-sm ${className}`}>
             <svg viewBox="0 0 100 100" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <g transform="translate(50,50)"><g><path d="M0,-45 a45,45 0 1,0 0,90 a45,45 0 1,0 0,-90" stroke="url(#grad-ring)" strokeWidth="4" strokeLinecap="round" className="animate-spin origin-center" style={{ animationDuration: '8s' }} opacity="0.8" strokeDasharray="15 30"/><path d="M-35,0 a35,35 0 1,0 70,0 a35,35 0 1,0 -70,0" stroke="url(#grad-ring)" strokeWidth="3" strokeLinecap="round" className="animate-spin origin-center" style={{ animationDuration: '10s', animationDirection: 'reverse' }} opacity="0.5" strokeDasharray="10 20"/></g><g className={'animate-pulse'}><text x="0" y="4" textAnchor="middle" dominantBaseline="central" fontFamily="system-ui, sans-serif" fontSize="50" fontWeight="bold" fill="url(#grad-bars)">M</text></g></g>
+                <g transform="translate(50,50)"><g><path d="M0,-45 a45,45 0 1,0 0,90 a45,45 0 1,0 0,-90" stroke="url(#grad-ring)" strokeWidth="4" strokeLinecap="round" className="animate-ring-spin origin-center" style={{ animationDuration: '8s' }} opacity="0.8" strokeDasharray="15 30"/><path d="M-35,0 a35,35 0 1,0 70,0 a35,35 0 1,0 -70,0" stroke="url(#grad-ring)" strokeWidth="3" strokeLinecap="round" className="animate-ring-spin-reverse origin-center" style={{ animationDuration: '10s' }} opacity="0.5" strokeDasharray="10 20"/></g><g className={'animate-core-pulse'}><text x="0" y="4" textAnchor="middle" dominantBaseline="central" fontFamily="system-ui, sans-serif" fontSize="50" fontWeight="bold" fill="url(#grad-bars)">M</text></g></g>
                 <defs><linearGradient id="grad-bars" x1="50%" y1="0%" x2="50%" y2="100%"><stop offset="0%" stopColor="#818CF8" /><stop offset="100%" stopColor="#6366F1" /></linearGradient><linearGradient id="grad-ring" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="rgba(99, 102, 241, 0.7)"/><stop offset="100%" stopColor="rgba(129, 140, 248, 0.1)"/></linearGradient></defs>
             </svg>
         </div>
@@ -107,87 +140,442 @@ export const FitToScreenIcon: React.FC<{ className?: string }> = (p) => (
     </svg>
 );
 
+export const FingerPrintIcon: React.FC<{ className?: string }> = (p) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...p}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7.864 4.243A7.5 7.5 0 0119.5 10.5c0 2.92-.556 5.709-1.568 8.268M5.742 6.364A7.465 7.465 0 004.5 10.5a7.464 7.464 0 01-1.15 3.993m1.989 3.559A11.209 11.209 0 008.25 10.5a3.75 3.75 0 117.5 0c0 .527-.021 1.049-.064 1.565M12 10.5a14.94 14.94 0 01-3.6 9.75m6.633-4.596a18.666 18.666 0 01-2.485 5.33" />
+    </svg>
+);
+
+export const PencilIcon: React.FC<{ className?: string }> = (p) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...p}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+    </svg>
+);
+
+export const ArrowDownOnSquareIcon: React.FC<{ className?: string }> = (p) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...p}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+    </svg>
+);
+
+export const VideoCameraIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9A2.25 2.25 0 0 0 13.5 5.25h-9A2.25 2.25 0 0 0 2.25 7.5v9A2.25 2.25 0 0 0 4.5 18.75Z" />
+    </svg>
+);
+
+export const PhotoIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+    </svg>
+);
+
+export const AspectRatioIcon11 = (p: any) => <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...p}><rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="2"/></svg>;
+export const AspectRatioIcon169 = (p: any) => <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...p}><rect x="2" y="6.5" width="20" height="11" rx="2" stroke="currentColor" strokeWidth="2"/></svg>;
+export const AspectRatioIcon916 = (p: any) => <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...p}><rect x="7" y="2" width="10" height="20" rx="2" stroke="currentColor" strokeWidth="2"/></svg>;
+export const AspectRatioIcon43 = (p: any) => <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...p}><rect x="4" y="6" width="16" height="12" rx="2" stroke="currentColor" strokeWidth="2"/></svg>;
+export const AspectRatioIcon34 = (p: any) => <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...p}><rect x="6" y="4" width="12" height="16" rx="2" stroke="currentColor" strokeWidth="2"/></svg>;
+export const AspectRatioIcon45 = (p: any) => <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...p}><rect x="5" y="3" width="14" height="18" rx="2" stroke="currentColor" strokeWidth="2"/></svg>;
+
+// --- SUB-COMPONENTS ---
+
+export const Header: React.FC<{ 
+    onReset: () => void; 
+    onOpenArchive: () => void; 
+    onOpenBrandDNA?: () => void; 
+    activeDNA?: string | null;
+}> = ({ onReset, onOpenArchive, onOpenBrandDNA, activeDNA }) => (
+    <div className="flex items-center px-6 py-3 bg-white shadow-[0_2px_15px_-3px_rgba(0,0,0,0.03)] z-20 relative flex-shrink-0">
+        <div className="flex items-center gap-5">
+            <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold shadow-sm">
+                    I
+                </div>
+                <h1 className="text-lg font-bold text-slate-800 tracking-tight">AI 图片创作</h1>
+            </div>
+            
+            <div className="h-6 w-px bg-slate-200"></div>
+
+            <div className="flex items-center space-x-3">
+                <button 
+                    onClick={onOpenArchive} 
+                    className="flex items-center space-x-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 py-2 px-3 rounded-lg transition-all shadow-sm"
+                >
+                    <ArchiveBoxIcon className="w-4 h-4 text-slate-500" />
+                    <span>创作档案</span>
+                </button>
+                
+                {onOpenBrandDNA && (
+                    <button 
+                        onClick={onOpenBrandDNA}
+                        className={`flex items-center space-x-1.5 text-xs font-bold py-2 px-3 rounded-lg transition-all shadow-sm ${
+                            activeDNA 
+                            ? 'bg-indigo-50 text-indigo-700 border border-indigo-200 ring-1 ring-indigo-200' 
+                            : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+                        }`}
+                    >
+                        <FingerPrintIcon className={`w-4 h-4 ${activeDNA ? 'text-indigo-500' : 'text-slate-500'}`} />
+                        <span>Brand DNA</span>
+                        {activeDNA && (
+                            <span className="w-2 h-2 bg-indigo-500 rounded-full ml-1"></span>
+                        )}
+                    </button>
+                )}
+
+                <button 
+                    onClick={onReset} 
+                    className="flex items-center space-x-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 py-2 px-3 rounded-lg transition-all shadow-sm ml-2"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
+                    </svg>
+                    <span>返回首页</span>
+                </button>
+            </div>
+        </div>
+        
+        <div className="flex-1"></div>
+    </div>
+);
+
 // --- COMPONENTS ---
-export const AIToggleButton: React.FC<{ 
-    enabled?: boolean;
-    checked?: boolean;  // 支持 checked 作为 enabled 的别名
-    onToggle?: () => void;
-    onChange?: () => void;  // 支持 onChange 作为 onToggle 的别名
-    icon?: React.ReactNode;  // 支持图标
-    label?: string;  // 支持自定义标签
-    className?: string;
-}> = ({ enabled, checked, onToggle, onChange, icon, label, className }) => {
-    const isEnabled = enabled !== undefined ? enabled : (checked !== undefined ? checked : false);
-    const handleToggle = onToggle || onChange || (() => {});
+export const EditorToolbar: React.FC<{ 
+    onDownload: () => void; 
+    onUpscale: (factor: 2 | 4) => void; 
+    isUpscaling: boolean;
+    onRegenerate: () => void;
+    onRemoveBackground: () => void;
+    isGenerating: boolean;
+    processingAction?: 'regenerate' | 'remove-bg' | null;
+    currentImageSize?: { width: number; height: number };
+}> = ({ onDownload, onUpscale, isUpscaling, onRegenerate, onRemoveBackground, isGenerating, processingAction, currentImageSize }) => {
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const wrapperRef = useRef<HTMLDivElement>(null);
+
+    // Dynamic resolution checks
+    const maxOutputDim = 4096; // Standard AI model limit
+    const currentMaxDim = currentImageSize ? Math.max(currentImageSize.width, currentImageSize.height) : 0;
     
+    // Safety check: Don't allow upscaling if already 4K-ish or above
+    const canUpscale2x = currentMaxDim > 0 && (currentMaxDim * 2 <= maxOutputDim + 100); // Small buffer
+    const canUpscale4x = currentMaxDim > 0 && (currentMaxDim * 4 <= maxOutputDim + 100);
+    
+    // Strict HD limit check to disable button entirely if already massive
+    const isAlreadyHD = currentMaxDim >= 3000;
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+                setIsMenuOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const handleUpscaleClick = (factor: 2 | 4) => {
+        onUpscale(factor);
+        setIsMenuOpen(false);
+    };
+
     return (
-        <button
-            onClick={handleToggle}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                isEnabled 
-                    ? 'bg-indigo-500 text-white shadow-md' 
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            } ${className || ''}`}
-        >
-            {icon && <span className="flex-shrink-0">{icon}</span>}
-            <span>{label || (isEnabled ? 'AI 开启' : 'AI 关闭')}</span>
-        </button>
+        <div className="bg-white/90 backdrop-blur-sm rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-slate-200 z-20 flex items-center p-1.5 space-x-1.5 h-10">
+            <div ref={wrapperRef} className="relative">
+                <button 
+                    onClick={() => setIsMenuOpen(prev => !prev)} 
+                    disabled={isUpscaling || isAlreadyHD} 
+                    className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 rounded-full px-3 h-7 hover:bg-slate-100 disabled:text-slate-400 disabled:bg-transparent disabled:cursor-not-allowed transition-colors"
+                    title={isAlreadyHD ? "图片已是高清画质，无需放大" : "提升画质"}
+                >
+                    {isUpscaling ? (
+                        <svg className="animate-spin h-3.5 w-3.5 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    ) : (
+                        <SparklesIcon className="w-3.5 h-3.5" />
+                    )}
+                    <span>HD</span>
+                </button>
+                {isMenuOpen && !isAlreadyHD && (
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-32 bg-white rounded-xl shadow-lg border border-slate-100 py-1 flex flex-col overflow-hidden animate-fade-in-up">
+                        <button 
+                            onClick={() => handleUpscaleClick(2)} 
+                            disabled={!canUpscale2x}
+                            className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 disabled:text-slate-300 disabled:cursor-not-allowed flex justify-between"
+                        >
+                            <span>放大 2倍</span>
+                            {!canUpscale2x && <span className="text-[9px] text-red-400 self-center border border-red-200 px-1 rounded">MAX</span>}
+                        </button>
+                        <button 
+                            onClick={() => handleUpscaleClick(4)} 
+                            disabled={!canUpscale4x}
+                            className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 disabled:text-slate-300 disabled:cursor-not-allowed flex justify-between"
+                        >
+                            <span>放大 4倍</span>
+                            {!canUpscale4x && <span className="text-[9px] text-red-400 self-center border border-red-200 px-1 rounded">MAX</span>}
+                        </button>
+                    </div>
+                )}
+            </div>
+            
+            <div className="w-px h-4 bg-slate-200" />
+
+            <button 
+                onClick={onRemoveBackground}
+                disabled={isGenerating}
+                className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 rounded-full px-3 h-7 hover:bg-slate-100 disabled:text-slate-400 disabled:bg-transparent disabled:cursor-not-allowed transition-colors"
+                title="智能去除背景"
+            >
+                {processingAction === 'remove-bg' ? (
+                     <svg className="animate-spin h-3.5 w-3.5 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                ) : (
+                    <LayersIcon className="w-3.5 h-3.5" />
+                )}
+                <span>抠图</span>
+            </button>
+
+            <div className="w-px h-4 bg-slate-200" />
+
+            <button 
+                onClick={onRegenerate}
+                disabled={isGenerating}
+                className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 rounded-full px-3 h-7 hover:bg-slate-100 disabled:text-slate-400 disabled:bg-transparent disabled:cursor-not-allowed transition-colors"
+                title="使用当前设置再次生成"
+            >
+                 {processingAction === 'regenerate' ? (
+                    <svg className="animate-spin h-3.5 w-3.5 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                ) : (
+                    <ArrowPathIcon className="w-3.5 h-3.5" />
+                )}
+                <span>重绘</span>
+            </button>
+
+            <div className="w-px h-4 bg-slate-200" />
+            <button onClick={onDownload} className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 rounded-full px-3 h-7 hover:bg-slate-100"><ArrowDownTrayIcon className="w-3.5 h-3.5" /><span>下载</span></button>
+        </div>
     );
 };
 
 export const ZoomControls: React.FC<{ 
     scale: number; 
     onZoomIn: () => void; 
-    onZoomOut: () => void;
-}> = ({ scale, onZoomIn, onZoomOut }) => (
-    <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg border border-gray-200 z-20 flex items-center text-sm font-medium">
-        <button onClick={onZoomOut} className="p-2 h-9 w-9 flex items-center justify-center hover:bg-gray-100 rounded-l-md">-</button>
-        <div className="px-3 h-9 flex items-center border-x border-gray-200 tabular-nums w-16 justify-center">{Math.round(scale * 100)}%</div>
-        <button onClick={onZoomIn} className="p-2 h-9 w-9 flex items-center justify-center hover:bg-gray-100 rounded-r-md">+</button>
-    </div>
-);
+    onZoomOut: () => void; 
+    onSetScale?: (scale: number) => void;
+}> = ({ scale, onZoomIn, onZoomOut, onSetScale }) => {
+    const [inputValue, setInputValue] = useState(Math.round(scale * 100).toString());
+
+    // Sync internal input state with prop scale
+    useEffect(() => {
+        setInputValue(Math.round(scale * 100).toString());
+    }, [scale]);
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        // Strip non-digits immediately
+        const cleanValue = e.target.value.replace(/[^0-9]/g, '');
+        setInputValue(cleanValue);
+    };
+
+    const handleInputCommit = () => {
+        let val = parseInt(inputValue, 10);
+        
+        // Strict Validation: Must be number, must be >= 10, must be <= 500
+        if (isNaN(val)) {
+            val = Math.round(scale * 100);
+        } else {
+            // Clamp between 10 and 500
+            val = Math.min(Math.max(10, val), 500);
+        }
+        
+        if (onSetScale) {
+            onSetScale(val / 100);
+        }
+        setInputValue(val.toString());
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            handleInputCommit();
+            (e.target as HTMLInputElement).blur();
+        }
+    };
+
+    return ( 
+        <div 
+            className="absolute bottom-6 left-6 bg-white/90 backdrop-blur-sm rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-slate-200 z-20 flex items-center text-sm font-medium overflow-hidden h-10"
+            onMouseDown={(e) => e.stopPropagation()} 
+        > 
+            <button onClick={onZoomOut} className="p-2 h-full w-10 flex items-center justify-center hover:bg-slate-50 active:bg-slate-100 text-slate-600" title="缩小">
+                -
+            </button> 
+            <div className="h-6 flex items-center border-x border-slate-200 w-14 justify-center relative">
+                <input 
+                    type="text" 
+                    value={inputValue}
+                    onChange={handleInputChange}
+                    onBlur={handleInputCommit}
+                    onKeyDown={handleKeyDown}
+                    className="w-full h-full text-center bg-transparent focus:outline-none text-slate-700 font-tabular-nums text-xs font-bold"
+                />
+                <span className="absolute right-0.5 text-slate-400 text-[10px] pointer-events-none">%</span>
+            </div> 
+            <button onClick={onZoomIn} className="p-2 h-full w-10 flex items-center justify-center hover:bg-slate-50 active:bg-slate-100 text-slate-600" title="放大">
+                +
+            </button> 
+        </div>
+    );
+};
 
 export const BottomToolbar: React.FC<{ 
     toolMode: 'select' | 'pan' | 'chat'; 
-    setToolMode: (mode: 'select' | 'pan' | 'chat') => void;
-}> = ({ toolMode, setToolMode }) => (
-    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg border border-gray-200 flex items-center p-1 space-x-1">
-        <button 
-            onClick={() => setToolMode('select')} 
-            className={`flex items-center space-x-2 p-2 px-3 rounded-md text-sm ${
-                toolMode === 'select' 
-                    ? 'bg-blue-500 text-white shadow' 
-                    : 'hover:bg-gray-100 text-gray-600'
-            }`}
-        >
-            <SelectIcon className="w-5 h-5" />
-            <span>选择</span>
-            <span className="text-gray-400 text-xs">(V)</span>
-        </button>
-        <button 
-            onClick={() => setToolMode('pan')} 
-            className={`flex items-center space-x-2 p-2 px-3 rounded-md text-sm ${
-                toolMode === 'pan' 
-                    ? 'bg-blue-500 text-white shadow' 
-                    : 'hover:bg-gray-100 text-gray-600'
-            }`}
-        >
-            <HandRaisedIcon className="w-5 h-5" />
-            <span>平移画布</span>
-            <span className="text-gray-400 text-xs">(H)</span>
-        </button>
-        <button 
-            onClick={() => setToolMode('chat')} 
-            className={`flex items-center space-x-2 p-2 px-3 rounded-md text-sm ${
-                toolMode === 'chat' 
-                    ? 'bg-blue-500 text-white shadow' 
-                    : 'hover:bg-gray-100 text-gray-600'
-            }`}
-        >
-            <ChatBubbleIcon className="w-5 h-5" />
-            <span>图片聊天</span>
-            <span className="text-gray-400 text-xs">(C)</span>
-        </button>
+    setToolMode: (mode: 'select' | 'pan' | 'chat') => void; 
+    onFitToScreen: () => void;
+}> = ({ toolMode, setToolMode, onFitToScreen }) => ( 
+    <div 
+        className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 bg-white/90 backdrop-blur-sm rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.08)] border border-slate-200 flex items-center p-1.5 space-x-1"
+        onMouseDown={(e) => e.stopPropagation()}
+    > 
+        <button onClick={() => setToolMode('select')} className={`flex items-center space-x-2 px-4 py-2 rounded-full text-xs font-semibold transition-all ${toolMode === 'select' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`}> <SelectIcon className="w-4 h-4" /> <span>选择</span> <span className="opacity-70 font-normal ml-1">V</span> </button> 
+        <button onClick={() => setToolMode('pan')} className={`flex items-center space-x-2 px-4 py-2 rounded-full text-xs font-semibold transition-all ${toolMode === 'pan' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`}> <HandRaisedIcon className="w-4 h-4" /> <span>平移</span> <span className="opacity-70 font-normal ml-1">H</span> </button> 
+        <button onClick={() => setToolMode('chat')} className={`flex items-center space-x-2 px-4 py-2 rounded-full text-xs font-semibold transition-all ${toolMode === 'chat' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`}> <ChatBubbleIcon className="w-4 h-4" /> <span>对话</span> <span className="opacity-70 font-normal ml-1">C</span> </button>
+        <div className="w-px h-5 bg-slate-200 mx-1" />
+        <button onClick={onFitToScreen} className="flex items-center space-x-2 px-3 py-2 rounded-full text-xs font-semibold hover:bg-slate-100 text-slate-600 transition-colors" title="适配屏幕"> <FitToScreenIcon className="w-4 h-4" /> <span>适配</span> </button> 
     </div>
 );
+
+export const aspectRatios = [
+    { value: '1:1', label: '方形', Icon: AspectRatioIcon11 },
+    { value: '16:9', label: '横向', Icon: AspectRatioIcon169 },
+    { value: '9:16', label: '纵向', Icon: AspectRatioIcon916 },
+    { value: '4:3', label: '标准', Icon: AspectRatioIcon43 },
+    { value: '3:4', label: '竖版', Icon: AspectRatioIcon34 },
+    { value: '4:5', label: '垂直', Icon: AspectRatioIcon45 },
+];
+
+export const AspectRatioSelector: React.FC<{
+    value: string;
+    onChange: (value: string) => void;
+    disabled: boolean;
+}> = ({ value, onChange, disabled }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const wrapperRef = useRef<HTMLDivElement>(null);
+    const selected = aspectRatios.find(r => r.value === value) || aspectRatios[0];
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const handleSelect = (newValue: string) => {
+        onChange(newValue);
+        setIsOpen(false);
+    };
+
+    return (
+        <div ref={wrapperRef} className="relative">
+            <button
+                onClick={() => setIsOpen(p => !p)}
+                disabled={disabled}
+                className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-all bg-white text-indigo-600 border border-indigo-100 hover:bg-indigo-50 hover:border-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                title={disabled ? "编辑图片或使用参考图时，无法更改宽高比。" : "选择图片尺寸"}
+            >
+                <selected.Icon className="w-4 h-4" />
+                <span>{selected.label}</span>
+            </button>
+            {isOpen && !disabled && (
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-40 bg-white rounded-xl shadow-xl border border-slate-100 py-1 z-50 animate-fade-in-up overflow-hidden">
+                    {aspectRatios.map(ratio => (
+                        <button
+                            key={ratio.value}
+                            onClick={() => handleSelect(ratio.value)}
+                            className={`w-full text-left px-4 py-2.5 text-xs flex items-center space-x-3 transition-colors ${value === ratio.value ? 'font-bold text-indigo-600 bg-indigo-50' : 'text-slate-600 hover:bg-slate-50'}`}
+                        >
+                            <ratio.Icon className="w-4 h-4" />
+                            <span>{ratio.label}</span>
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
+export const ModelSelector: React.FC<{
+    value: 'banana' | 'banana_pro';
+    onChange: (value: 'banana' | 'banana_pro') => void;
+    disabled: boolean;
+}> = ({ value, onChange, disabled }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const wrapperRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const handleSelect = (newValue: 'banana' | 'banana_pro') => {
+        onChange(newValue);
+        setIsOpen(false);
+    };
+
+    return (
+        <div ref={wrapperRef} className="relative">
+            <button
+                onClick={() => setIsOpen(p => !p)}
+                disabled={disabled}
+                className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-all bg-white text-indigo-600 border border-indigo-100 hover:bg-indigo-50 hover:border-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                title="选择生成模型"
+            >
+                <CubeIcon className="w-4 h-4" />
+                <span>{value === 'banana_pro' ? 'Pro' : 'Flash'}</span>
+            </button>
+            {isOpen && !disabled && (
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-1 z-50 animate-fade-in-up overflow-hidden">
+                    <button
+                        onClick={() => handleSelect('banana')}
+                        className={`w-full text-left px-4 py-3 text-xs flex flex-col transition-colors ${value === 'banana' ? 'bg-indigo-50' : 'hover:bg-slate-50'}`}
+                    >
+                        <span className={`font-bold ${value === 'banana' ? 'text-indigo-600' : 'text-slate-800'}`}>Nano Banana (Flash)</span>
+                        <span className="text-[10px] text-slate-400 mt-0.5">极速生成 • 低消耗</span>
+                    </button>
+                    <button
+                        onClick={() => handleSelect('banana_pro')}
+                        className={`w-full text-left px-4 py-3 text-xs flex flex-col transition-colors ${value === 'banana_pro' ? 'bg-indigo-50' : 'hover:bg-slate-50'}`}
+                    >
+                        <span className={`font-bold ${value === 'banana_pro' ? 'text-indigo-600' : 'text-slate-800'}`}>Banana Pro</span>
+                        <span className="text-[10px] text-slate-400 mt-0.5">高画质 • 遵循度强</span>
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+};
+
+export const AIToggleButton: React.FC<{
+    icon: React.ReactNode;
+    label: string;
+    checked: boolean;
+    onChange: () => void;
+}> = ({ icon, label, checked, onChange }) => {
+    return (
+        <button 
+            onClick={onChange}
+            className={`flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-all border shadow-sm ${
+                checked 
+                ? 'bg-indigo-600 text-white border-indigo-600 ring-1 ring-indigo-600' 
+                : 'bg-white text-indigo-600 border-indigo-100 hover:bg-indigo-50 hover:border-indigo-200'
+            }`}
+        >
+            {icon}
+            <span>{label}</span>
+        </button>
+    );
+};
 

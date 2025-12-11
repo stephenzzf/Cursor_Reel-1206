@@ -8,9 +8,11 @@ import { ReelMessage, ReelAsset, EnhancedPrompt } from '../types';
 
 // 获取后端 API 基础 URL（开发环境或生产环境）
 // 在生产环境中，如果前后端部署在同一域名，使用相对路径
-// 在开发环境中，使用 localhost:8787
+// 在开发环境中：
+//   - 如果配置了 Vite 代理（/api），使用空字符串（相对路径）
+//   - 否则使用 http://localhost:8787
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
-    (import.meta.env.PROD ? '' : 'http://localhost:8787');
+    (import.meta.env.PROD ? '' : '');
 
 /**
  * 获取 Firebase ID Token
@@ -192,7 +194,8 @@ export async function generateReelAsset(
     model: 'banana' | 'banana_pro' | 'veo_fast' | 'veo_gen',
     images: { data: string; mimeType: string }[],
     aspectRatio: '9:16' = '9:16',
-    sourceAssetId?: string
+    sourceAssetId?: string,
+    activeProfileId?: string  // 新增：Brand DNA ID
 ): Promise<ReelAsset> {
     // 根据模型类型设置不同的超时时间
     // 视频生成通常需要 30-60 秒，加上轮询时间，需要更长的超时
@@ -219,6 +222,7 @@ export async function generateReelAsset(
             images,
             aspectRatio,
             sourceAssetId,
+            activeProfileId,  // 新增
         }),
     }, 3, timeout); // 传递超时参数
     
@@ -242,12 +246,13 @@ export async function generateReelAsset(
  */
 export async function getReelEnhancement(
     prompt: string,
-    model: string
+    model: string,
+    activeProfileId?: string  // 新增：Brand DNA ID
 ): Promise<EnhancedPrompt[]> {
     // 提示词优化需要调用 Gemini API，设置 60 秒超时
     return apiRequest('/api/reel/enhance-prompt', {
         method: 'POST',
-        body: JSON.stringify({ prompt, model }),
+        body: JSON.stringify({ prompt, model, activeProfileId }),
     }, 3, 60000); // 60 秒超时
 }
 
@@ -256,7 +261,8 @@ export async function getReelEnhancement(
  */
 export async function getReelDesignPlan(
     topic: string,
-    model: string
+    model: string,
+    activeProfileId?: string  // 新增：Brand DNA ID
 ): Promise<Array<{
     title: string;
     description: string;
@@ -266,8 +272,42 @@ export async function getReelDesignPlan(
     // 设计灵感需要调用 Gemini API，设置 60 秒超时
     return apiRequest('/api/reel/design-plan', {
         method: 'POST',
-        body: JSON.stringify({ topic, model }),
+        body: JSON.stringify({ topic, model, activeProfileId }),
     }, 3, 60000); // 60 秒超时
+}
+
+/**
+ * 检测模态（图片或视频）
+ */
+export async function detectReelModality(
+    prompt: string
+): Promise<'image' | 'video'> {
+    return apiRequest<{ modality: 'image' | 'video' }>('/api/reel/detect-modality', {
+        method: 'POST',
+        body: JSON.stringify({ prompt }),
+    }, 3, 10000).then(response => response.modality); // 10 秒超时，快速检测
+}
+
+/**
+ * 提取 Brand DNA
+ */
+export async function extractBrandDNA(request: {
+    logoImage?: { data: string; mimeType: string };
+    referenceImages?: { data: string; mimeType: string }[];
+    description: string;
+    videoUrls?: string[];
+}): Promise<{
+    visualStyle: string;
+    colorPalette: string;
+    mood: string;
+    negativeConstraint: string;
+    motionStyle?: string;
+}> {
+    // Brand DNA 提取需要调用 Gemini API 进行多模态分析，设置 120 秒超时
+    return apiRequest('/api/brand-dna/extract', {
+        method: 'POST',
+        body: JSON.stringify(request),
+    }, 3, 120000); // 120 秒超时
 }
 
 /**

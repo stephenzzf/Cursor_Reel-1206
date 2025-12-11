@@ -1,14 +1,15 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-    CubeIcon, SparklesIcon, LayersIcon, ArrowPathIcon, ArrowDownTrayIcon, ClipboardDocumentIcon
+    CubeIcon, SparklesIcon, LayersIcon, ArrowPathIcon, ArrowDownTrayIcon, ClipboardDocumentIcon,
+    ArchiveBoxIcon, FingerPrintIcon
 } from '../image_gen/ImageGenAssets';
 
 // Export common icons from other assets to avoid duplication or re-export
 export { 
     AIAvatarIcon, ToolIcon, LightbulbIcon, ArchiveBoxIcon, ArrowDownTrayIcon, PaperClipIcon, 
     SparklesIcon, SelectIcon, HandRaisedIcon, ChatBubbleIcon, FitToScreenIcon,
-    AIToggleButton, ZoomControls, BottomToolbar
+    AIToggleButton, ZoomControls, BottomToolbar, FingerPrintIcon
 } from '../image_gen/ImageGenAssets';
 
 export const PhotoIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -24,7 +25,12 @@ export const VideoCameraIcon: React.FC<{ className?: string }> = ({ className })
 );
 
 // --- HEADER ---
-export const Header: React.FC<{ onReset: () => void; onOpenArchive: () => void; }> = ({ onReset, onOpenArchive }) => (
+export const Header: React.FC<{ 
+    onReset: () => void; 
+    onOpenArchive: () => void; 
+    onOpenBrandDNA?: () => void; 
+    activeDNA?: string | null;
+}> = ({ onReset, onOpenArchive, onOpenBrandDNA, activeDNA }) => (
     <div className="flex items-center px-6 py-3 bg-white shadow-[0_2px_15px_-3px_rgba(0,0,0,0.03)] z-20 relative flex-shrink-0">
         <div className="flex items-center gap-5">
             <div className="flex items-center gap-3">
@@ -41,9 +47,27 @@ export const Header: React.FC<{ onReset: () => void; onOpenArchive: () => void; 
                     onClick={onOpenArchive} 
                     className="flex items-center space-x-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 py-2 px-3 rounded-lg transition-all shadow-sm"
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" /></svg>
+                    <ArchiveBoxIcon className="w-4 h-4 text-slate-500" />
                     <span>创作档案</span>
                 </button>
+                
+                {onOpenBrandDNA && (
+                    <button 
+                        onClick={onOpenBrandDNA}
+                        className={`flex items-center space-x-1.5 text-xs font-bold py-2 px-3 rounded-lg transition-all shadow-sm ${
+                            activeDNA 
+                            ? 'bg-indigo-50 text-indigo-700 border border-indigo-200 ring-1 ring-indigo-200' 
+                            : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+                        }`}
+                    >
+                        <FingerPrintIcon className={`w-4 h-4 ${activeDNA ? 'text-indigo-500' : 'text-slate-500'}`} />
+                        <span>Brand DNA</span>
+                        {activeDNA && (
+                            <span className="w-2 h-2 bg-indigo-500 rounded-full ml-1"></span>
+                        )}
+                    </button>
+                )}
+                
                 <button 
                     onClick={onReset} 
                     className="flex items-center space-x-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 py-2 px-3 rounded-lg transition-all shadow-sm ml-2"
@@ -213,11 +237,12 @@ export const ReelModelSelector: React.FC<ReelModelSelectorProps> = ({ value, onC
 
     const getLabel = () => {
         switch(value) {
+            case '': return 'Auto (智能)';
             case 'banana': return 'Flash Image';
             case 'banana_pro': return 'Pro Image';
             case 'veo_fast': return 'Veo Fast';
             case 'veo_gen': return 'Veo Gen';
-            default: return 'Select Model';
+            default: return 'Auto (智能)';
         }
     };
 
@@ -236,7 +261,12 @@ export const ReelModelSelector: React.FC<ReelModelSelectorProps> = ({ value, onC
             </button>
             {isOpen && !disabled && (
                 <div className="absolute bottom-full left-0 mb-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 py-1 z-50 animate-fade-in-up overflow-hidden">
-                    <div className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50 border-b border-slate-100">
+                    <button onClick={() => handleSelect('')} className={`w-full text-left px-4 py-2 text-xs flex justify-between items-center transition-colors ${value === '' ? 'bg-indigo-50 text-indigo-700 font-bold' : 'hover:bg-slate-50 text-slate-700'}`}>
+                        <span>Auto (智能选择)</span>
+                        {value === '' && <span className="text-indigo-500">●</span>}
+                    </button>
+
+                    <div className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50 border-y border-slate-100 mt-1">
                         AI 图片模型
                     </div>
                     <button onClick={() => handleSelect('banana')} className={`w-full text-left px-4 py-2 text-xs flex justify-between items-center transition-colors ${value === 'banana' ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-50 text-slate-700'}`}>

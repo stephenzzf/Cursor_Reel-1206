@@ -7,6 +7,7 @@ from flask import Blueprint, request, jsonify
 from services.gemini_service import get_gemini_service_safe
 from services.video_asset_service import get_video_asset_service
 from utils.auth import verify_firebase_token
+from utils.brand_dna_utils import get_brand_dna_profile, inject_brand_dna_to_prompt, get_brand_dna_style_reference
 import json
 import base64
 import os
@@ -425,7 +426,8 @@ def generate():
         "model": 'banana' | 'banana_pro' | 'veo_fast' | 'veo_gen',
         "images": [{"data": string, "mimeType": string}],
         "aspectRatio": '9:16',
-        "sourceAssetId"?: string
+        "sourceAssetId"?: string,
+        "activeProfileId"?: string  # Brand DNA ID
     }
     """
     import time
@@ -449,12 +451,24 @@ def generate():
         images = data.get('images', [])
         aspect_ratio = data.get('aspectRatio', '9:16')
         source_asset_id = data.get('sourceAssetId')
+        active_profile_id = data.get('activeProfileId')  # 新增：Brand DNA ID
         
         print(f"[API] Prompt: {prompt[:100]}..." if len(prompt) > 100 else f"[API] Prompt: {prompt}")
         print(f"[API] Model: {model}")
         print(f"[API] Aspect Ratio: {aspect_ratio}")
         print(f"[API] Images count: {len(images)}")
         print(f"[API] Source Asset ID: {source_asset_id or 'None'}")
+        print(f"[API] Active Profile ID: {active_profile_id or 'None'}")
+        
+        # 读取并注入 Brand DNA（如果提供）
+        brand_dna = None
+        if active_profile_id:
+            brand_dna = get_brand_dna_profile(uid, active_profile_id)
+            if brand_dna:
+                print(f"[API] 🧬 Brand DNA loaded: {brand_dna.get('name', 'Unknown')}")
+                prompt = inject_brand_dna_to_prompt(prompt, brand_dna, is_video=is_video_model(model))
+            else:
+                print(f"[API] ⚠️ Brand DNA profile {active_profile_id} not found or not accessible")
         
         gemini, error_response = get_gemini_service_safe()
         if error_response:
@@ -757,6 +771,33 @@ def generate():
                     'mimeType': img.get('mimeType', 'image/jpeg')
                 })
             
+            # Brand DNA 风格参考图片（图片模式专用）
+            # 如果用户没有上传图片，且 Brand DNA 有 styleReferenceUrl，使用它作为参考
+            if brand_dna and len(image_parts) == 0:
+                style_ref_url = get_brand_dna_style_reference(brand_dna)
+                if style_ref_url:
+                    try:
+                        # 从 URL 下载图片并转换为 base64
+                        import urllib.request
+                        import urllib.error
+                        response = urllib.request.urlopen(style_ref_url)
+                        image_data = response.read()
+                        image_base64 = base64.b64encode(image_data).decode('utf-8')
+                        # 检测 MIME 类型
+                        mime_type = 'image/jpeg'  # 默认
+                        if '.png' in style_ref_url.lower():
+                            mime_type = 'image/png'
+                        elif '.webp' in style_ref_url.lower():
+                            mime_type = 'image/webp'
+                        
+                        image_parts.append({
+                            'data': image_base64,
+                            'mimeType': mime_type
+                        })
+                        print(f"[API] ✅ Added Brand DNA style reference image")
+                    except Exception as e:
+                        print(f"[API] ⚠️ Failed to load Brand DNA style reference: {e}")
+            
             if image_parts:
                 print(f"[API] Using {len(image_parts)} input image(s)")
             else:
@@ -821,7 +862,11 @@ def enhance_prompt():
     """
     优化提示词
     
-    Request: { "prompt": string, "model": string }
+    Request: { 
+        "prompt": string, 
+        "model": string,
+        "activeProfileId"?: string  # Brand DNA ID
+    }
     Response: EnhancedPrompt[] // Array of {title, description, tags, fullPrompt}
     """
     try:
@@ -831,19 +876,48 @@ def enhance_prompt():
         
         prompt = data['prompt']
         model = data.get('model', 'banana')
+        active_profile_id = data.get('activeProfileId')  # 新增
+        uid = getattr(request, 'uid', 'unknown')
+        
+        # 读取 Brand DNA（如果提供）
+        brand_dna = None
+        if active_profile_id:
+            brand_dna = get_brand_dna_profile(uid, active_profile_id)
+        
         gemini, error_response = get_gemini_service_safe()
         if error_response:
             return error_response
         
+        # 构建 Brand DNA 上下文（如果存在）
+        brand_context = ""
+        if brand_dna and brand_dna.get('isActive'):
+            # 预先构建字符串，避免在 f-string 表达式中使用包含反斜杠的变量
+            brand_context_base = f"""
+
+**MANDATORY BRAND GUIDELINES (Brand DNA - {brand_dna.get('name', 'Active Profile')}):**
+- **Visual Style**: {brand_dna.get('visualStyle', '')}
+- **Color Palette**: {brand_dna.get('colorPalette', '')}
+- **Mood**: {brand_dna.get('mood', '')}
+- **Negative Constraints (AVOID)**: {brand_dna.get('negativeConstraint', '')}"""
+            
+            motion_style_line = ""
+            if is_video_model(model) and brand_dna.get('motionStyle'):
+                motion_style_line = f"\n- **Motion Style**: {brand_dna.get('motionStyle', '')}"
+            
+            brand_context = brand_context_base + motion_style_line + """
+
+IMPORTANT: All generated prompt options MUST strictly adhere to these brand guidelines. Integrate them naturally into the visual description."""
+        
         if is_video_model(model):
             # 视频提示词优化
-            system_instruction = """You are a Senior VEO 3.1 Prompt Specialist & Cinematic Director. Your task is to transform a user's basic idea into three distinct, professional creative directions for high-end video generation.
+            system_instruction = f"""You are a Senior VEO 3.1 Prompt Specialist & Cinematic Director. Your task is to transform a user's basic idea into three distinct, professional creative directions for high-end video generation.
 
 The Veo model requires specific prompt engineering to achieve the best results. You must strictly follow these VEO Golden Rules in your `fullPrompt`:
 1. **Subject & Action**: Describe fluid motion, physics, and specific activities clearly (not just who, but *what* they are doing dynamically).
 2. **Environment & Lighting**: Include atmospheric details (e.g., volumetric fog, golden hour, cinematic lighting, HDR, neon noir).
 3. **Camera Language**: MANDATORY. Use specific cinematic terms (e.g., Drone FPV, Low angle, Dolly zoom, Slow pan, Handheld shake, Bokeh, Rack focus).
 4. **Style & Aesthetics**: Specify film stock, render engine, or artistic style (e.g., 35mm film grain, Photorealistic, 8k, Unreal Engine 5 style).
+{brand_context if brand_context else ""}
 
 Based on the user's idea, generate three distinct "Video Concept Cards" that tell a story:
 - **Option A (Realistic/Cinematic)**: Focus on photorealism, movie-like quality, high-end production value (ARRI/IMAX aesthetics).
@@ -854,25 +928,26 @@ For each card, provide:
 1. `title`: A short, catchy title (e.g., "Neon Drift: Cyberpunk").
 2. `description`: A one-sentence summary of the narrative and visual mood.
 3. `tags`: An array of 3-4 relevant keyword tags.
-4. `fullPrompt`: A comprehensive, detailed prompt using the VEO Golden Rules above.
+4. `fullPrompt`: A comprehensive, detailed prompt using the VEO Golden Rules above{" and Brand DNA guidelines" if brand_context else ""}.
 
 IMPORTANT: Detect the language of the user's idea (it will be either Chinese or English). You MUST generate all content for the cards (titles, descriptions, tags, and full prompts) in that SAME language (or Chinese mixed with English technical terms if the input is Chinese).
 
 Your entire output must be a single, valid JSON array adhering to this TypeScript interface:
 ```typescript
-interface EnhancedPrompt {
+interface EnhancedPrompt {{
   title: string;
   description: string;
   tags: string[];
   fullPrompt: string;
-}
+}}
 ```"""
         else:
             # 图片提示词优化
-            system_instruction = "You are an expert AI Art Director. Your task is to transform a user's basic idea into three distinct, professional creative directions. You must return a valid JSON array of objects."
+            system_instruction = f"""You are an expert AI Art Director. Your task is to transform a user's basic idea into three distinct, professional creative directions. You must return a valid JSON array of objects.{brand_context}"""
         
         user_content = f"""
 The user's idea is: "{prompt}"
+{brand_context if brand_context else ""}
 
 Based on this idea, generate three distinct "Prompt Optimization Cards". For each card, provide:
 1. `title`: A short, catchy title for the creative direction (e.g., "Cinematic Portrait", "Retro Anime Style").
@@ -922,7 +997,11 @@ def design_plan():
     """
     获取设计灵感方案
     
-    Request: { "topic": string, "model": string }
+    Request: { 
+        "topic": string, 
+        "model": string,
+        "activeProfileId"?: string  # Brand DNA ID
+    }
     Response: DesignPlan[] // Array of {title, description, prompt, referenceImagePrompt}
     """
     try:
@@ -932,9 +1011,37 @@ def design_plan():
         
         topic = data['topic']
         model = data.get('model', 'banana')
+        active_profile_id = data.get('activeProfileId')  # 新增
+        uid = getattr(request, 'uid', 'unknown')
+        
+        # 读取 Brand DNA（如果提供）
+        brand_dna = None
+        if active_profile_id:
+            brand_dna = get_brand_dna_profile(uid, active_profile_id)
+        
         gemini, error_response = get_gemini_service_safe()
         if error_response:
             return error_response
+        
+        # 构建 Brand DNA 上下文（如果存在）
+        brand_context = ""
+        if brand_dna and brand_dna.get('isActive'):
+            # 预先构建字符串，避免在 f-string 表达式中使用包含反斜杠的变量
+            brand_context_base = f"""
+
+**MANDATORY BRAND GUIDELINES (Brand DNA - {brand_dna.get('name', 'Active Profile')}):**
+- **Visual Style**: {brand_dna.get('visualStyle', '')}
+- **Color Palette**: {brand_dna.get('colorPalette', '')}
+- **Mood**: {brand_dna.get('mood', '')}
+- **Negative Constraints**: {brand_dna.get('negativeConstraint', '')}"""
+            
+            motion_style_line = ""
+            if is_video_model(model) and brand_dna.get('motionStyle'):
+                motion_style_line = f"\n- **Motion Style**: {brand_dna.get('motionStyle', '')}"
+            
+            brand_context = brand_context_base + motion_style_line + """
+
+IMPORTANT: All suggested design strategies MUST align with these brand guidelines while incorporating trends from the research."""
         
         if is_video_model(model):
             # 视频设计灵感
@@ -957,9 +1064,13 @@ Detect the language of the topic (Chinese or English). Provide a concise but tec
             
             research_summary = safe_get_text(research_response)
             
+            # 预先构建字符串，避免 f-string 中包含反斜杠
+            video_brand_note = " Strictly adhere to Brand DNA guidelines." if brand_context else ""
+            
             structuring_prompt = f"""
 Act as a VEO 3.1 Creative Director.
 Based on the following Visual Research Summary about "{topic}", create three distinct video production schemes.
+{brand_context if brand_context else ""}
 
 Research Summary:
 {research_summary}
@@ -973,7 +1084,7 @@ For each scheme, provide a JSON object with:
 1. `title`: Creative title.
 2. `description`: Brief visual summary.
 3. `referenceImagePrompt`: **CRITICAL**: This must describe a single **KEYFRAME** (First Frame) composition. Use terms like "A still shot of...", "Hyper-realistic photography of...", "Golden ratio composition". Do not describe motion here, only the static visual start point.
-4. `prompt`: The video generation prompt. Must follow the **[Subject + Action + Environment + Lighting + Camera + Style]** formula. Include specific camera moves (e.g., "Slow dolly in") and temporal details.
+4. `prompt`: The video generation prompt. Must follow the **[Subject + Action + Environment + Lighting + Camera + Style]** formula. Include specific camera moves (e.g., "Slow dolly in") and temporal details.{video_brand_note}
 
 Output: A valid JSON array of 3 objects. Use the same language as the input topic.
 """
@@ -986,29 +1097,24 @@ Detect the language of the topic (Chinese or English) and provide your findings 
             research_response = gemini.generate_content(research_prompt, model='gemini-2.5-flash')
             research_summary = safe_get_text(research_response)
             
-            structuring_prompt = f"""
-Based on the following research summary about the topic "{topic}", create three distinct creative strategies.
-
-**Research Summary**:
----
-{research_summary}
----
-
-**IMPORTANT**:
-- You MUST detect the language from the research summary (it will be either Chinese or English).
-- You MUST generate all parts of your response (title, description, and both prompts) exclusively in that SAME language. Do not mix languages.
-
-**Output Format**:
-Return a valid JSON array of three objects adhering to this TypeScript interface. Do not include any text outside the JSON.
-```typescript
-interface DesignPlanWithImagePrompt {{
-  title: string; // A creative title for the design strategy.
-  description: string; // A short explanation of the visual direction.
-  prompt: string; // A detailed, ready-to-use prompt for the FINAL image creation if the user chooses this plan.
-  referenceImagePrompt: string; // A separate, detailed prompt specifically for generating a high-quality REFERENCE image that visually represents this strategy's mood and style.
-}}
-```
-"""
+            # 预先构建所有包含反斜杠的字符串，避免在 f-string 表达式中使用
+            brand_dna_suffix = ", strictly adhering to Brand DNA" if brand_context else ""
+            
+            # 构建 IMPORTANT 部分的完整文本
+            important_base = """- You MUST detect the language from the research summary (it will be either Chinese or English).
+- You MUST generate all parts of your response (title, description, and both prompts) exclusively in that SAME language. Do not mix languages."""
+            important_with_dna = important_base + "\n- All suggested design strategies MUST strictly adhere to the Brand DNA guidelines provided above."
+            important_text = important_with_dna if brand_context else important_base
+            
+            # 构建 TypeScript 接口注释
+            prompt_line = f"  prompt: string; // A detailed, ready-to-use prompt for the FINAL image creation if the user chooses this plan{brand_dna_suffix}."
+            ref_prompt_line = f"  referenceImagePrompt: string; // A separate, detailed prompt specifically for generating a high-quality REFERENCE image that visually represents this strategy's mood and style{brand_dna_suffix}."
+            
+            # 构建完整的 prompt 字符串（避免在 f-string 表达式中使用包含反斜杠的变量）
+            structuring_prompt = "Based on the following research summary about the topic \"" + topic + "\", create three distinct creative strategies.\n"
+            if brand_context:
+                structuring_prompt += brand_context + "\n\n"
+            structuring_prompt += "**Research Summary**:\n---\n" + research_summary + "\n---\n\n**IMPORTANT**:\n" + important_text + "\n\n**Output Format**:\nReturn a valid JSON array of three objects adhering to this TypeScript interface. Do not include any text outside the JSON.\n```typescript\ninterface DesignPlanWithImagePrompt {\n  title: string; // A creative title for the design strategy.\n  description: string; // A short explanation of the visual direction.\n" + prompt_line + "\n" + ref_prompt_line + "\n}\n```\n"
         
         structuring_response = gemini.generate_content(structuring_prompt, model='gemini-2.5-flash')
         text = safe_get_text(structuring_response)
@@ -1114,6 +1220,65 @@ def remove_background():
     
     except Exception as e:
         print(f"Error in remove_background: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@reel_bp.route('/detect-modality', methods=['POST'])
+@verify_firebase_token
+def detect_modality():
+    """
+    自动检测用户意图是图片还是视频生成
+    
+    Request: { "prompt": string }
+    Response: { "modality": "image" | "video" }
+    """
+    try:
+        data = request.get_json()
+        if not data or 'prompt' not in data:
+            return jsonify({"error": "Missing 'prompt' in request body"}), 400
+        
+        prompt = data['prompt']
+        gemini, error_response = get_gemini_service_safe()
+        if error_response:
+            return error_response
+        
+        system_instruction = """Classify the User Prompt into "VIDEO" or "IMAGE" generation intent.
+- VIDEO keywords: "video", "clip", "animate", "motion", "pan", "zoom", "drone", "camera movement", "time-lapse", "视频", "动效", "运镜", "航拍", "帧".
+- IMAGE keywords: "image", "photo", "picture", "poster", "logo", "icon", "static", "illustration", "drawing", "图片", "照片", "画", "图".
+- If ambiguous or describing a scene without specific motion verbs, default to "IMAGE".
+
+Return JSON: { "modality": "VIDEO" | "IMAGE" }"""
+        
+        classification_prompt = f"""User prompt: "{prompt}"
+
+Classify this prompt as either "VIDEO" or "IMAGE" generation intent based on keywords and context.
+Return JSON: {{ "modality": "VIDEO" | "IMAGE" }}"""
+        
+        try:
+            response = gemini.generate_content(
+                classification_prompt,
+                model='gemini-2.5-flash',
+                system_instruction=system_instruction
+            )
+            text = safe_get_text(response)
+            result = safe_json_parse(text, {"modality": "IMAGE"})
+            
+            # 标准化返回值：VIDEO -> video, IMAGE -> image
+            modality = result.get('modality', 'IMAGE').upper()
+            if modality == 'VIDEO':
+                return jsonify({"modality": "video"})
+            else:
+                return jsonify({"modality": "image"})
+        
+        except Exception as e:
+            print(f"Modality detection failed: {e}")
+            # 默认返回 image
+            return jsonify({"modality": "image"})
+    
+    except Exception as e:
+        print(f"Error in detect_modality: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500

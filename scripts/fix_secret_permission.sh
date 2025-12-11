@@ -69,3 +69,5 @@ echo -e "${YELLOW}下一步:${NC}"
 echo "1. 在 Cloud Run Console 中重新部署服务"
 echo "2. 或运行: gcloud run services update $SERVICE_NAME --region us-central1"
 echo ""
+
+

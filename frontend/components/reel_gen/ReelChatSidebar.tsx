@@ -5,7 +5,8 @@ import { ReelMessage, GalleryItem, EnhancedPrompt, ReelAsset } from '../../types
 import { 
     AIAvatarIcon, ToolIcon,
     AIToggleButton, ReelModelSelector, ReelAspectRatioBadge,
-    VideoCameraIcon, PhotoIcon, SparklesIcon, LightbulbIcon, PaperClipIcon, ArchiveBoxIcon
+    VideoCameraIcon, PhotoIcon, SparklesIcon, LightbulbIcon, PaperClipIcon, ArchiveBoxIcon,
+    FingerPrintIcon
 } from './ReelGenAssets';
 
 // --- SUB-COMPONENT: Asset Card (Handles Safe Video Playback) ---
@@ -83,13 +84,17 @@ interface ReelChatSidebarProps {
     handleUseSuggestion?: (p: string) => void;
     handleUseDesignPlan?: (p: any) => void;
     setSelectedAssetId: (id: string | null) => void;
+    // Brand DNA Props
+    activeDNAName?: string | null;
+    onDeactivateDNA?: () => void;
 }
 
 const ReelChatSidebar: React.FC<ReelChatSidebarProps> = ({
     messages, assets, isLoading, userInput, setUserInput, uploadedFiles, handleFileChange, handleRemoveFile, handlePaste, handleSubmit,
     enhancePromptEnabled, setEnhancePromptEnabled, designInspirationEnabled, setDesignInspirationEnabled,
     selectedModel, setSelectedModel, isArchiveOpen, setIsArchiveOpen, galleryItems, userInputRef, messagesEndRef,
-    onSwitchModel, handleUseSuggestion, handleUseDesignPlan, setSelectedAssetId
+    onSwitchModel, handleUseSuggestion, handleUseDesignPlan, setSelectedAssetId,
+    activeDNAName, onDeactivateDNA
 }) => {
     
     // Group consecutive asset messages to create a "collection" feel similar to Image Gen
@@ -327,6 +332,29 @@ const ReelChatSidebar: React.FC<ReelChatSidebarProps> = ({
                         <ReelAspectRatioBadge />
                     </div>
                 </div>
+
+                {/* Active Brand DNA Indicator */}
+                {activeDNAName && (
+                    <div className="absolute bottom-full left-6 mb-3 animate-fade-in">
+                        <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-100 rounded-full pl-3 pr-2 py-1 shadow-sm">
+                            <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider">Active Brand DNA</span>
+                            <div className="flex items-center gap-1.5">
+                                <FingerPrintIcon className="w-3.5 h-3.5 text-indigo-600" />
+                                <span className="text-xs font-bold text-indigo-700">{activeDNAName}</span>
+                            </div>
+                            <div className="w-px h-3 bg-indigo-200 mx-0.5"></div>
+                            <button 
+                                onClick={onDeactivateDNA}
+                                className="hover:bg-indigo-100 rounded-full p-0.5 text-indigo-400 hover:text-indigo-600 transition-colors"
+                                title="关闭 Brand DNA"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {/* Uploaded Files Preview */}
                 {uploadedFiles.length > 0 && (

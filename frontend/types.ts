@@ -265,12 +265,17 @@ export interface BrandVisualProfile {
     name: string;        
     description: string; 
     logoUrl?: string; // Optional URL for the logo if we save it
+    styleReferenceUrl?: string; // Optional URL for the main reference image
     
     // Step 2 & 3: AI Extracted Visual Genes
     visualStyle: string; // Composition, lighting, material (e.g., "Matte finish, soft diffused lighting")
     colorPalette: string; // Key colors (e.g., "Pastel pink and mint green, high key")
     mood: string;        // Emotional atmosphere (e.g., "Serene, organic")
     
+    // NEW: Motion & Video Genes (For Reel/Veo)
+    videoRefs?: string[]; // Array of YouTube URLs (max 3)
+    motionStyle?: string; // Extracted motion characteristics (e.g., "Slow pan, drone FPV, fast cuts")
+
     // NEW: Negative Constraints for Brand Safety
     negativeConstraint: string; // (e.g., "No neon, no grunge, no chaotic background")
     

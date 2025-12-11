@@ -7,12 +7,14 @@ import {
     getReelDesignPlan,
     upscaleImage,
     removeBackground,
-    generateReferenceImage
+    generateReferenceImage,
+    detectReelModality
 } from './useReelApi';
 import { subscribeToGallery, uploadImageToStorage, saveGalleryItem } from '../services/galleryService';
 import { deductUserCredits } from '../services/userService';
 import { auth } from '../firebaseConfig';
 import { ReelMessage, ReelAsset, GalleryItem, UserProfile, SnapGuide } from '../types';
+import { useBrandVisualProfiles } from './useBrandVisualProfiles';
 
 const SNAP_THRESHOLD_PX = 10;
 
@@ -44,6 +46,21 @@ const prepareImageForApi = async (src: string): Promise<{ data: string; mimeType
 };
 
 export const useReelGeneration = (initialPrompt: string, userProfile: UserProfile | null, isProfileLoading: boolean) => {
+    // --- BRAND VISUAL PROFILES ---
+    const { 
+        visualProfiles, activeProfile, loading: profilesLoading, setActive: setActiveProfile, removeProfile: deleteProfile,
+        error: dnaError
+    } = useBrandVisualProfiles();
+    const [isDNAOpen, setIsDNAOpen] = useState(false);
+    const [configError, setConfigError] = useState<string | null>(null);
+
+    // Monitor for DNA permission errors
+    useEffect(() => {
+        if (dnaError && (dnaError.includes("Missing or insufficient permissions") || dnaError.includes("permission-denied"))) {
+            setConfigError("PERMISSION_DENIED");
+        }
+    }, [dnaError]);
+    
     // --- STATE ---
     const [messages, setMessages] = useState<ReelMessage[]>([]);
     const [assets, setAssets] = useState<Record<string, ReelAsset>>({});
@@ -72,8 +89,8 @@ export const useReelGeneration = (initialPrompt: string, userProfile: UserProfil
     const [onCanvasChatInput, setOnCanvasChatInput] = useState('');
     const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
 
-    // Configuration
-    const [selectedModel, setSelectedModel] = useState<string>('banana'); // Default to Flash Image
+    // Configuration - Default to empty for AUTO detection
+    const [selectedModel, setSelectedModel] = useState<string>('');
 
     // Refs
     const canvasRef = useRef<HTMLDivElement>(null);
@@ -133,15 +150,36 @@ export const useReelGeneration = (initialPrompt: string, userProfile: UserProfil
     const executeGeneration = useCallback(async (prompt: string, targetId: string | null, modelOverride?: string) => {
         if (!userProfile) { alert("请先登录。"); return; }
         
-        // Use override model if provided (e.g., from regeneration), otherwise use current sidebar selection
-        const modelToUse = modelOverride || selectedModel;
-        const assetTypeLabel = modelToUse.includes('veo') ? '视频' : '图片';
+        // Use override model if provided, otherwise use current sidebar selection
+        // If sidebar selection is empty (Auto), default to banana (Flash Image) unless logic overrides
+        const modelToUse = modelOverride || selectedModel || 'banana'; 
+        const isVideo = modelToUse.includes('veo');
+        const assetTypeLabel = isVideo ? '视频' : '图片';
 
         setIsLoading(true);
         try {
             // Determine source asset
             const sourceAsset = targetId ? assets[targetId] : undefined;
             
+            // Determine Generation Mode Label
+            let modeLabel = "文生内容";
+            if (isVideo) {
+                if (uploadedFiles.length === 0 && !sourceAsset) {
+                    modeLabel = "文生视频";
+                } else if (uploadedFiles.length === 1 || (sourceAsset && uploadedFiles.length === 0)) {
+                    modeLabel = "图生视频 (首帧)";
+                } else if (uploadedFiles.length >= 2) {
+                    modeLabel = "图生视频 (首尾帧)";
+                }
+            } else {
+                // Image Model
+                if (uploadedFiles.length > 0 || sourceAsset) {
+                    modeLabel = "图生图 (参考)";
+                } else {
+                    modeLabel = "文生图";
+                }
+            }
+
             // Generate detailed status message
             let timeEstimate = "5-10 秒";
             let modelDisplay = "Flash Image";
@@ -158,8 +196,12 @@ export const useReelGeneration = (initialPrompt: string, userProfile: UserProfil
             }
 
             const actionText = targetId ? `基于参考${assetTypeLabel}生成` : `生成全新${assetTypeLabel}`;
+            let statusText = `🚀 模型: ${modelDisplay}\n🎥 模式: ${modeLabel}\n⏱️ 预估时间: ${timeEstimate}\n✨ 状态: 正在制作中...`;
+            if (activeProfile) {
+                statusText += `\n🧬 Brand DNA: ${activeProfile.name} (已应用)`;
+            }
             
-            addMessage('assistant', 'text', `好的，这就为您${actionText}。\n\n🚀 模型: ${modelDisplay}\n⏱️ 预估时间: ${timeEstimate}\n✨ 状态: 正在制作中...`);
+            addMessage('assistant', 'text', `好的，这就为您${actionText}。\n\n${statusText}`);
             
             // Prepare images for API
             const imageInputs: { data: string; mimeType: string }[] = [];
@@ -186,13 +228,14 @@ export const useReelGeneration = (initialPrompt: string, userProfile: UserProfil
                 }
             }
             
-            // Generate
+            // Generate (Pass activeProfileId)
             const newAsset = await generateReelAsset(
                 prompt,
                 modelToUse as 'banana' | 'banana_pro' | 'veo_fast' | 'veo_gen',
                 imageInputs,
                 '9:16',
-                sourceAsset?.id
+                sourceAsset?.id,
+                activeProfile?.id  // 新增：Brand DNA ID
             );
             
             // Calculate Position
@@ -212,13 +255,15 @@ export const useReelGeneration = (initialPrompt: string, userProfile: UserProfil
         } finally {
             setIsLoading(false);
         }
-    }, [userProfile, selectedModel, uploadedFiles, assets, addMessage, calculateNewPosition]);
+    }, [userProfile, selectedModel, uploadedFiles, assets, addMessage, calculateNewPosition, activeProfile]);
 
-    const executeEnhancePrompt = useCallback(async (prompt: string) => { 
+    const executeEnhancePrompt = useCallback(async (prompt: string, modelOverride?: string) => { 
+        const modelToUse = modelOverride || selectedModel || 'banana';
         setIsLoading(true); 
         addMessage('assistant', 'tool-usage', { text: 'AI 创意总监 | 提示词优化' }); 
         try { 
-            const suggestions = await getReelEnhancement(prompt, selectedModel); 
+            // Pass activeProfileId to enhancement
+            const suggestions = await getReelEnhancement(prompt, modelToUse, activeProfile?.id); 
             addMessage('assistant', 'prompt-options', suggestions); 
         } catch (error) { 
             console.error("Enhance prompt failed", error);
@@ -226,13 +271,15 @@ export const useReelGeneration = (initialPrompt: string, userProfile: UserProfil
         } finally { 
             setIsLoading(false); 
         } 
-    }, [addMessage, selectedModel]);
+    }, [addMessage, selectedModel, activeProfile]);
 
-    const executeGetDesignPlan = useCallback(async (prompt: string) => { 
+    const executeGetDesignPlan = useCallback(async (prompt: string, modelOverride?: string) => { 
+        const modelToUse = modelOverride || selectedModel || 'banana';
         setIsLoading(true); 
         addMessage('assistant', 'tool-usage', { text: 'AI 创意总监 | 设计灵感' }); 
         try { 
-            const plansWithPrompts = await getReelDesignPlan(prompt, selectedModel); 
+            // Pass activeProfileId to design plan
+            const plansWithPrompts = await getReelDesignPlan(prompt, modelToUse, activeProfile?.id); 
             if (!plansWithPrompts || plansWithPrompts.length === 0) { throw new Error("AI 未返回任何设计方案。"); } 
             
             // Generate visual previews for plans
@@ -255,14 +302,30 @@ export const useReelGeneration = (initialPrompt: string, userProfile: UserProfil
         } finally { 
             setIsLoading(false); 
         } 
-    }, [addMessage, selectedModel]);
+    }, [addMessage, selectedModel, activeProfile]);
 
     const processUserTurn = useCallback(async (prompt: string) => {
         setIsLoading(true);
         try {
+            let currentModel = selectedModel;
+
+            // --- AUTO DETECTION ---
+            // If model is empty AND no uploads (uploads force context usually)
+            if (!currentModel) {
+                const detected = await detectReelModality(prompt);
+                if (detected === 'video') {
+                    currentModel = 'veo_fast';
+                    addMessage('assistant', 'text', '✨ 智能检测: 已自动切换至视频模式 (Veo Fast)');
+                } else {
+                    currentModel = 'banana';
+                    addMessage('assistant', 'text', '✨ 智能检测: 已自动切换至图片模式 (Flash Image)');
+                }
+                setSelectedModel(currentModel);
+            }
+
             const actionResult = await getReelCreativeDirectorAction(
                 prompt,
-                selectedModel,
+                currentModel,
                 assets,
                 selectedAssetId,
                 lastGeneratedAssetId,
@@ -292,15 +355,15 @@ export const useReelGeneration = (initialPrompt: string, userProfile: UserProfil
                 // --- INTELLIGENT ROUTING ---
                 // If the user has "Design Inspiration" ON, we fetch plans and STOP (waiting for user selection)
                 if (designInspirationEnabled) {
-                    await executeGetDesignPlan(actionResult.prompt);
+                    await executeGetDesignPlan(actionResult.prompt, currentModel);
                 } 
                 // If "Optimize" is ON, we fetch options and STOP (waiting for user selection)
                 else if (enhancePromptEnabled) {
-                    await executeEnhancePrompt(actionResult.prompt);
+                    await executeEnhancePrompt(actionResult.prompt, currentModel);
                 } 
                 // Otherwise, execute generation immediately
                 else {
-                    await executeGeneration(actionResult.prompt, actionResult.targetAssetId || selectedAssetId);
+                    await executeGeneration(actionResult.prompt, actionResult.targetAssetId || selectedAssetId, currentModel);
                 }
             }
 
@@ -377,7 +440,9 @@ export const useReelGeneration = (initialPrompt: string, userProfile: UserProfil
                 originalPrompt,
                 newModel as 'banana' | 'banana_pro' | 'veo_fast' | 'veo_gen',
                 imageInputs,
-                '9:16'
+                '9:16',
+                undefined,
+                activeProfile?.id  // 新增：Brand DNA ID
             );
             const { x, y } = calculateNewPosition(null, assets);
             newAsset.x = x;
@@ -393,7 +458,7 @@ export const useReelGeneration = (initialPrompt: string, userProfile: UserProfil
             addMessage('assistant', 'text', `生成失败: ${e.message}`);
         }
 
-    }, [assets, calculateNewPosition, uploadedFiles, addMessage]);
+    }, [assets, calculateNewPosition, uploadedFiles, addMessage, activeProfile]);
 
     // --- TOOLBAR ACTIONS ---
 
@@ -750,15 +815,39 @@ export const useReelGeneration = (initialPrompt: string, userProfile: UserProfil
         setSnapGuides([]);
     };
 
-    const handleCanvasWheel = (e: React.WheelEvent) => {
-        const delta = -e.deltaY * 0.001;
-        const newScale = Math.min(Math.max(0.1, 5), transform.scale + delta);
-        setTransform(t => ({ ...t, scale: newScale }));
-    };
+    const handleCanvasWheel = useCallback((e: React.WheelEvent) => {
+        if (!canvasRef.current) return;
+        const rect = canvasRef.current.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const sensitivity = 0.001; 
+        const delta = -e.deltaY * sensitivity;
+
+        setTransform(prev => {
+            const targetScale = prev.scale + delta;
+            const newScale = Math.min(Math.max(0.1, 5.0), targetScale);
+            const scaleRatio = newScale / prev.scale;
+            const newX = mouseX - (mouseX - prev.x) * scaleRatio;
+            const newY = mouseY - (mouseY - prev.y) * scaleRatio;
+            return { scale: newScale, x: newX, y: newY };
+        });
+    }, []);
 
     const zoom = (dir: 'in' | 'out') => {
-        const delta = dir === 'in' ? 0.1 : -0.1;
-        setTransform(t => ({ ...t, scale: Math.min(Math.max(0.1, 5), t.scale + delta) }));
+        if (!canvasRef.current) return; 
+        const rect = canvasRef.current.getBoundingClientRect(); 
+        const centerX = rect.width / 2; 
+        const centerY = rect.height / 2; 
+        const scaleAmount = dir === 'in' ? 0.1 : -0.1; 
+        
+        setTransform(prev => {
+            const newScale = Math.min(Math.max(0.1, 5), prev.scale + scaleAmount);
+            return { 
+                scale: newScale, 
+                x: centerX - (centerX - prev.x) * (newScale / prev.scale), 
+                y: centerY - (centerY - prev.y) * (newScale / prev.scale) 
+            };
+        });
     };
 
     const setZoomLevel = (newScale: number) => {
@@ -868,6 +957,9 @@ export const useReelGeneration = (initialPrompt: string, userProfile: UserProfil
         processingAction,
         handleUseSuggestion, // Added
         handleUseDesignPlan, // Added
-        snapGuides
+        snapGuides,
+        // Brand DNA
+        visualProfiles, activeProfile, profilesLoading, setActiveProfile, deleteProfile, isDNAOpen, setIsDNAOpen,
+        configError, setConfigError
     };
 };

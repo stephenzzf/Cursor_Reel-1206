@@ -147,3 +147,28 @@ export const subscribeToGallery = (
     }
 };
 
+/**
+ * 上传文件到 Firebase Storage
+ */
+export const uploadFileToStorage = async (userId: string, file: File, folder: string = "uploads"): Promise<string> => {
+    if (!storage) throw new Error('Firebase Storage not initialized');
+    
+    try {
+        const timestamp = Date.now();
+        // Sanitize file name
+        const safeName = file.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        const fileName = `users/${userId}/${folder}/${timestamp}_${safeName}`;
+        const storageRef = storage.ref(fileName);
+        
+        // 上传文件
+        await storageRef.put(file);
+        
+        // 获取下载 URL
+        const downloadURL = await storageRef.getDownloadURL();
+        return downloadURL;
+    } catch (error) {
+        console.error('Failed to upload file to storage:', error);
+        throw error;
+    }
+};
+

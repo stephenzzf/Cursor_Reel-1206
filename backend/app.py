@@ -90,7 +90,9 @@ print("=" * 50 + "\n")
 
 # Register blueprints
 from routes.reel import reel_bp
+from routes.brand_dna import brand_dna_bp
 app.register_blueprint(reel_bp)
+app.register_blueprint(brand_dna_bp)
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -99,6 +101,7 @@ def health():
 
 # SPA 路由处理：所有非 API 请求返回 index.html
 # 这必须在所有蓝图注册之后，以确保 API 路由优先级更高
+# 注意：只处理 GET 请求，避免拦截 POST/PUT/DELETE 等 API 请求
 @app.route('/', defaults={'path': ''}, methods=['GET'])
 @app.route('/<path:path>', methods=['GET'])
 def serve_frontend(path):

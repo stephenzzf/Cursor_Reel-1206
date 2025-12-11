@@ -12,6 +12,9 @@ interface ReelCanvasProps {
     chattingAssetId: string | null;
     isLoading: boolean;
     
+    // Canvas ref for viewport calculations
+    canvasRef: React.RefObject<HTMLDivElement>;
+    
     // Handlers
     setToolMode: (m: 'select' | 'pan' | 'chat') => void;
     handleCanvasMouseDown: (e: React.MouseEvent) => void;
@@ -42,6 +45,7 @@ interface ReelCanvasProps {
 
 const ReelCanvas: React.FC<ReelCanvasProps> = ({
     assets, selectedAssetId, transform, toolMode, chattingAssetId, isLoading,
+    canvasRef,
     setToolMode, handleCanvasMouseDown, handleCanvasMouseMove, handleCanvasMouseUp, handleCanvasWheel, handleAssetMouseDown,
     zoom, setZoomLevel, fitToScreen, onCanvasChatInput, setOnCanvasChatInput, handleOnCanvasChatSubmit,
     handleDownload, handleCopyFrame, handleUpscale, handleRemoveBackground, handleRegenerate, isUpscaling, processingAction,
@@ -108,7 +112,7 @@ const ReelCanvas: React.FC<ReelCanvasProps> = ({
             {/* Background Pattern */}
             <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)', backgroundSize: '24px 24px', transform: `translate(${transform.x % 24}px, ${transform.y % 24}px)` }}></div>
             
-            <div className="absolute top-0 left-0 w-full h-full origin-top-left transition-transform duration-75 ease-linear" style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }}>
+            <div ref={canvasRef} className="absolute top-0 left-0 w-full h-full origin-top-left transition-transform duration-75 ease-linear" style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }}>
                 
                 <ConnectionLinesLayer assets={assets} />
 
@@ -184,25 +188,33 @@ const ReelCanvas: React.FC<ReelCanvasProps> = ({
                         {/* On-Canvas Chat Input */}
                         {chattingAssetId === asset.id && (
                             <div 
-                                className="absolute z-50 left-1/2 top-full -translate-x-1/2 mt-4 w-64 bg-white rounded-xl shadow-xl border border-slate-100 p-2 animate-fade-in-up"
-                                onMouseDown={(e) => e.stopPropagation()}
-                                style={{ transform: `scale(${1/transform.scale})`, transformOrigin: 'top center' }}
+                                className="on-canvas-chat-box-wrapper absolute z-20"
+                                style={{
+                                    left: '50%',
+                                    top: '100%',
+                                    transformOrigin: 'top center',
+                                    transform: `translate(-50%, 0) translateY(${16 / transform.scale}px) scale(${1 / transform.scale})`
+                                }}
+                                onClick={e => e.stopPropagation()}
+                                onMouseDown={e => e.stopPropagation()}
                             >
-                                <div className="flex items-center space-x-2 mb-2 px-1">
-                                    <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse"></div>
-                                    <span className="text-[10px] font-bold text-slate-500 uppercase">Edit {asset.type}</span>
+                                <div className="w-[300px] bg-white rounded-2xl shadow-xl border border-slate-100 p-4 animate-fade-in-up">
+                                    <div className="flex items-center space-x-2 mb-2">
+                                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
+                                        <span className="text-xs font-bold text-slate-700">编辑指令</span>
+                                    </div>
+                                    <form onSubmit={handleOnCanvasChatSubmit} className="flex gap-2">
+                                        <input 
+                                            type="text" 
+                                            autoFocus
+                                            value={onCanvasChatInput} 
+                                            onChange={e => setOnCanvasChatInput(e.target.value)} 
+                                            placeholder={`例如: ${asset.type === 'image' ? '换成蓝色背景...' : '变快一点...'}`} 
+                                            className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                                        />
+                                        <button type="submit" disabled={!onCanvasChatInput.trim()} className="bg-indigo-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 transition-colors">执行</button>
+                                    </form>
                                 </div>
-                                <form onSubmit={handleOnCanvasChatSubmit} className="flex gap-2">
-                                    <input 
-                                        type="text" 
-                                        autoFocus
-                                        value={onCanvasChatInput} 
-                                        onChange={e => setOnCanvasChatInput(e.target.value)} 
-                                        placeholder={`例如: ${asset.type === 'image' ? '换成红色背景...' : '变快一点...'}`} 
-                                        className="flex-1 text-sm border border-slate-200 rounded px-2 py-1 outline-none focus:border-indigo-500"
-                                    />
-                                    <button type="submit" disabled={!onCanvasChatInput.trim()} className="bg-indigo-600 text-white text-xs px-2 rounded hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400">→</button>
-                                </form>
                             </div>
                         )}
                     </div>
