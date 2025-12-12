@@ -244,11 +244,11 @@ const ReelChatSidebar: React.FC<ReelChatSidebarProps> = ({
                                             <p className="mb-3 font-medium text-sm text-slate-700">为您构思了以下创意方向：</p>
                                             <div className="space-y-2">
                                                 {(msg.content as EnhancedPrompt[]).map((opt, idx) => (
-                                                    <button key={idx} onClick={() => handleUseSuggestion && handleUseSuggestion(opt.fullPrompt)} className="w-full text-left p-3.5 bg-white rounded-xl border border-slate-200 hover:border-pink-400 hover:shadow-md transition-all group relative overflow-hidden">
-                                                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-pink-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                                    <button key={idx} onClick={() => handleUseSuggestion && handleUseSuggestion(opt.fullPrompt)} className="w-full text-left p-3.5 bg-white rounded-xl border border-slate-200 hover:border-indigo-400 hover:shadow-md transition-all group relative overflow-hidden">
+                                                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                                                         <div className="flex justify-between items-start mb-1">
-                                                            <h4 className="font-bold text-slate-800 text-sm group-hover:text-pink-600 transition-colors">{opt.title}</h4>
-                                                            <span className="text-[10px] bg-pink-50 text-pink-600 px-2 py-0.5 rounded-full font-bold">PROMPT</span>
+                                                            <h4 className="font-bold text-slate-800 text-sm group-hover:text-indigo-600 transition-colors">{opt.title}</h4>
+                                                            <span className="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-bold">PROMPT</span>
                                                         </div>
                                                         <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">{opt.description}</p>
                                                     </button>
@@ -275,7 +275,7 @@ const ReelChatSidebar: React.FC<ReelChatSidebarProps> = ({
                                                         </div>
                                                         <div className="p-3">
                                                             <p className="text-xs text-slate-500 mb-3 line-clamp-2 leading-relaxed">{plan.description}</p>
-                                                            <button onClick={() => handleUseDesignPlan && handleUseDesignPlan(plan)} className="w-full py-2 bg-pink-50 text-pink-600 text-xs font-bold rounded-lg hover:bg-pink-100 hover:text-pink-700 transition-colors">
+                                                            <button onClick={() => handleUseDesignPlan && handleUseDesignPlan(plan)} className="w-full py-2 bg-indigo-50 text-indigo-600 text-xs font-bold rounded-lg hover:bg-indigo-100 hover:text-indigo-700 transition-colors">
                                                                 采用此风格
                                                             </button>
                                                         </div>
@@ -379,7 +379,7 @@ const ReelChatSidebar: React.FC<ReelChatSidebarProps> = ({
                 )}
 
                 <form onSubmit={handleSubmit} className="relative w-full">
-                    <div className="flex items-center gap-2 bg-white rounded-[26px] border border-slate-200 shadow-sm p-1.5 focus-within:ring-2 focus-within:ring-pink-100 focus-within:border-pink-300 transition-all">
+                    <div className="flex items-center gap-2 bg-white rounded-[26px] border border-slate-200 shadow-[0_4px_20px_rgba(0,0,0,0.03)] p-1.5 transition-all duration-200 focus-within:ring-2 focus-within:ring-indigo-100 focus-within:border-indigo-300">
                         <textarea
                             ref={userInputRef}
                             value={userInput}
@@ -387,19 +387,33 @@ const ReelChatSidebar: React.FC<ReelChatSidebarProps> = ({
                             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(e); } }}
                             onPaste={handlePaste}
                             placeholder="输入提示词... (支持混排创作)"
-                            className="flex-1 bg-transparent border-none focus:ring-0 text-sm text-slate-700 px-4 py-3 max-h-32 resize-none ml-1"
+                            className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-sm text-slate-700 placeholder-slate-400 px-4 py-3 max-h-32 resize-none ml-1"
                             rows={1}
                             style={{ minHeight: '44px' }}
                             disabled={isLoading}
                         />
                         <div className="flex-shrink-0">
-                            <label htmlFor="reel-upload" className="cursor-pointer text-slate-400 hover:text-pink-600 transition-colors flex items-center justify-center w-9 h-9 rounded-full hover:bg-slate-100">
+                            <label htmlFor="reel-upload" className="cursor-pointer text-slate-400 hover:text-indigo-600 transition-colors flex items-center justify-center w-9 h-9 rounded-full hover:bg-slate-100">
                                 <PaperClipIcon className="w-5 h-5" />
                                 <input id="reel-upload" type="file" accept="image/*" multiple onChange={handleFileChange} className="hidden" disabled={isLoading || uploadedFiles.length >= 3} />
                             </label>
                         </div>
-                        <button type="submit" disabled={isLoading || (!userInput.trim() && uploadedFiles.length === 0)} className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-pink-500 to-orange-400 text-white hover:shadow-md flex items-center justify-center transition-all disabled:bg-none disabled:bg-slate-200 disabled:cursor-not-allowed">
-                            {isLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : '↑'}
+                        <button 
+                            type="submit" 
+                            disabled={isLoading || (!userInput.trim() && uploadedFiles.length === 0)} 
+                            className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ${
+                                (!userInput.trim() && uploadedFiles.length === 0) || isLoading
+                                ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md hover:shadow-lg transform hover:-translate-y-0.5'
+                            }`}
+                        >
+                            {isLoading ? (
+                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            ) : (
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 pl-0.5">
+                                    <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+                                </svg>
+                            )}
                         </button>
                     </div>
                 </form>

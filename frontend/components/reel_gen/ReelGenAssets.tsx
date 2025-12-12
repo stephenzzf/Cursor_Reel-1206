@@ -131,7 +131,7 @@ export const ReelEditorToolbar: React.FC<ReelEditorToolbarProps> = ({
                         <button 
                             onClick={() => setIsMenuOpen(prev => !prev)} 
                             disabled={isUpscaling} 
-                            className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 rounded-full px-3 h-7 hover:bg-slate-100 disabled:text-slate-400 disabled:bg-transparent disabled:cursor-not-allowed transition-colors"
+                            className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 rounded-full px-3 h-7 hover:bg-slate-100 disabled:text-slate-400 disabled:bg-transparent disabled:cursor-not-allowed transition-colors whitespace-nowrap"
                             title="高清放大"
                         >
                             {isUpscaling ? (
@@ -154,7 +154,7 @@ export const ReelEditorToolbar: React.FC<ReelEditorToolbarProps> = ({
                     <button 
                         onClick={onRemoveBackground}
                         disabled={isProcessing}
-                        className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 rounded-full px-3 h-7 hover:bg-slate-100 disabled:text-slate-400 disabled:bg-transparent disabled:cursor-not-allowed transition-colors"
+                        className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 rounded-full px-3 h-7 hover:bg-slate-100 disabled:text-slate-400 disabled:bg-transparent disabled:cursor-not-allowed transition-colors whitespace-nowrap"
                         title="智能抠图"
                     >
                         {processingAction === 'remove-bg' ? (
@@ -174,7 +174,7 @@ export const ReelEditorToolbar: React.FC<ReelEditorToolbarProps> = ({
                 <>
                     <button 
                         onClick={onCopyFrame} 
-                        className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 rounded-full px-3 h-7 hover:bg-slate-100" 
+                        className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 rounded-full px-3 h-7 hover:bg-slate-100 whitespace-nowrap" 
                         title="复制当前画面"
                     >
                         <ClipboardDocumentIcon className="w-3.5 h-3.5" />
@@ -188,7 +188,7 @@ export const ReelEditorToolbar: React.FC<ReelEditorToolbarProps> = ({
             <button 
                 onClick={onRegenerate}
                 disabled={isProcessing}
-                className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 rounded-full px-3 h-7 hover:bg-slate-100 disabled:text-slate-400 disabled:bg-transparent disabled:cursor-not-allowed transition-colors"
+                className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 rounded-full px-3 h-7 hover:bg-slate-100 disabled:text-slate-400 disabled:bg-transparent disabled:cursor-not-allowed transition-colors whitespace-nowrap"
                 title="重绘"
             >
                  {processingAction === 'regenerate' ? (
@@ -201,7 +201,7 @@ export const ReelEditorToolbar: React.FC<ReelEditorToolbarProps> = ({
 
             <div className="w-px h-4 bg-slate-200" />
             
-            <button onClick={onDownload} className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 rounded-full px-3 h-7 hover:bg-slate-100" title="下载资源">
+            <button onClick={onDownload} className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 rounded-full px-3 h-7 hover:bg-slate-100 whitespace-nowrap" title="下载资源">
                 <ArrowDownTrayIcon className="w-3.5 h-3.5" />
                 <span>下载</span>
             </button>

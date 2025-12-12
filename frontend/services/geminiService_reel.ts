@@ -2,7 +2,10 @@
 // ... (existing imports)
 import { GoogleGenAI, Type, GenerateContentResponse, FunctionDeclaration } from "@google/genai";
 import { generateImage, getCreativeDirectorAction, enhancePrompt as enhanceImagePrompt, getDesignPlan as getImageDesignPlan } from './geminiService';
-import { generateVideo, getVideoCreativeDirectorAction, enhancePrompt as enhanceVideoPrompt, getDesignPlan as getVideoDesignPlan, persistVideoToStorage } from './geminiService_video';
+// 注意：视频相关功能已迁移到 videoService.ts，但为了向后兼容，这里保留接口
+// 如果 geminiService_reel.ts 仍在使用，需要更新为使用 videoService
+import { generateVideo, getVideoCreativeDirectorAction, enhancePrompt as enhanceVideoPrompt, getDesignPlan as getVideoDesignPlan } from './videoService';
+// persistVideoToStorage 已由后端处理，不再需要前端实现
 import { uploadImageToStorage, saveGalleryItem } from './galleryService';
 import { deductUserCredits } from './userService';
 import { auth } from '../firebaseConfig';
@@ -218,8 +221,8 @@ export const generateReelAsset = async (
             model as 'veo_fast' | 'veo_gen'
         );
 
-        // Persist - Fixed args: pass prompt, not URI
-        const persistentUrl = await persistVideoToStorage(videoUri, prompt);
+        // 注意：后端已处理视频持久化，videoUri 已经是永久 URL
+        const persistentUrl = videoUri;
         
         // Save & Deduct
         if (auth.currentUser) {
@@ -306,7 +309,7 @@ export const generateReelAsset = async (
 // --- ENHANCEMENT TOOLS ---
 export const getReelEnhancement = async (prompt: string, model: string) => {
     if (isVideoModel(model)) {
-        return await enhanceVideoPrompt(prompt);
+        return await enhanceVideoPrompt(prompt, model as 'veo_fast' | 'veo_gen');
     } else {
         return await enhanceImagePrompt(prompt);
     }
@@ -314,7 +317,7 @@ export const getReelEnhancement = async (prompt: string, model: string) => {
 
 export const getReelDesignPlan = async (prompt: string, model: string) => {
     if (isVideoModel(model)) {
-        return await getVideoDesignPlan(prompt);
+        return await getVideoDesignPlan(prompt, model as 'veo_fast' | 'veo_gen');
     } else {
         return await getImageDesignPlan(prompt);
     }

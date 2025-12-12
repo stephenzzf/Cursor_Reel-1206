@@ -199,7 +199,7 @@ Return JSON: {{ "mismatch": boolean, "suggestedModel": "veo_fast" | "banana", "r
                         },
                         'reasoning': {
                             'type': 'STRING',
-                            'description': 'Explanation in Chinese'
+                            'description': 'Detailed explanation in Chinese following this format: "用户想要创建一个新的 YouTube Short 视频，主题是关于{用户提示词的总结}。因此，执行{操作类型}操作。" For EDIT_VIDEO: "因此，执行编辑视频操作。", For NEW_VIDEO: "因此，执行新建视频操作。", For ANSWER_QUESTION: provide appropriate answer context.'
                         },
                         'targetVideoId': {
                             'type': 'STRING',
@@ -228,7 +228,11 @@ You are an AI Video Director. Analyze the user's request in the context of a vid
 **Output**: Call 'video_creative_director_action'.
 - `action`: "EDIT_VIDEO" | "NEW_VIDEO" | "ANSWER_QUESTION"
 - `prompt`: The refined video generation prompt (or text answer).
-- `reasoning`: Brief explanation in Chinese (e.g., "好的，基于上一条视频为您调整风格...").
+- `reasoning`: Detailed explanation in Chinese following this structured format:
+  * For NEW_VIDEO: "用户想要创建一个新的 YouTube Short 视频，主题是关于{{用户提示词的总结和描述}}。因此，执行新建视频操作。"
+  * For EDIT_VIDEO: "用户想要编辑视频，调整内容为{{修改要求}}。因此，执行编辑视频操作。"
+  * For ANSWER_QUESTION: Provide appropriate contextual answer in Chinese.
+  IMPORTANT: Summarize the user's prompt naturally in Chinese rather than directly quoting it.
 - `targetVideoId`: The ID of the video to edit/reference (if action is EDIT_VIDEO).
 """
             
@@ -273,7 +277,7 @@ You are an AI Video Director. Analyze the user's request in the context of a vid
                     result = {
                         'action': 'NEW_ASSET' if action == 'NEW_VIDEO' else ('EDIT_ASSET' if action == 'EDIT_VIDEO' else 'ANSWER_QUESTION'),
                         'prompt': args.get('prompt', user_prompt),
-                        'reasoning': args.get('reasoning', '好的，正在为您处理视频请求。')
+                        'reasoning': args.get('reasoning', f'用户想要创建一个新的 YouTube Short 视频，主题是关于{user_prompt}。因此，执行新建视频操作。')
                     }
                     if 'targetVideoId' in args:
                         result['targetAssetId'] = args['targetVideoId']
@@ -283,7 +287,7 @@ You are an AI Video Director. Analyze the user's request in the context of a vid
             return jsonify({
                 'action': 'NEW_ASSET',
                 'prompt': user_prompt,
-                'reasoning': '好的，正在为您生成关于"{user_prompt}"的视频。'
+                'reasoning': f'用户想要创建一个新的 YouTube Short 视频，主题是关于{user_prompt}。因此，执行新建视频操作。'
             })
         else:
             # 图片模型逻辑
@@ -318,7 +322,7 @@ You are an AI Video Director. Analyze the user's request in the context of a vid
                         },
                         'reasoning': {
                             'type': 'STRING',
-                            'description': 'A brief, user-facing explanation in Chinese for why this action was chosen.'
+                            'description': 'Detailed explanation in Chinese following this format: For NEW_CREATION: "用户想要创建一张新图片，主题是关于{用户提示词的总结}。因此，执行新建创作操作。" For EDIT_IMAGE: "用户想要编辑图片，调整内容为{修改要求}。因此，执行编辑图片操作。" For ANSWER_QUESTION: provide appropriate contextual answer.'
                         },
                         'targetImageId': {
                             'type': 'STRING',
@@ -344,7 +348,11 @@ You are an AI Creative Director. Your job is to analyze the user's request in th
 2. **Answer Question**: If the user is asking a question or making a comment that doesn't seem to be an image request (e.g., "what can you do?", "that's cool"), the action is **ANSWER_QUESTION**.
 3. **Default to New Creation**: For any other creative request that is not an edit or a question, the action is **NEW_CREATION**.
 
-Based on this logic, call the 'creative_director_action' function with your decision. The 'reasoning' should be a short, friendly, and contextual message in Chinese to the user explaining your understanding.
+Based on this logic, call the 'creative_director_action' function with your decision. The 'reasoning' should follow this structured format in Chinese:
+  * For NEW_CREATION: "用户想要创建一张新图片，主题是关于{{用户提示词的总结和描述}}。因此，执行新建创作操作。"
+  * For EDIT_IMAGE: "用户想要编辑图片，调整内容为{{修改要求}}。因此，执行编辑图片操作。"
+  * For ANSWER_QUESTION: Provide appropriate contextual answer in Chinese.
+  IMPORTANT: Summarize the user's prompt naturally in Chinese rather than directly quoting it.
 """
             
             response = gemini.generate_content_with_function_calling(prompt, [creative_director_tool], model='gemini-2.5-pro')
@@ -376,7 +384,7 @@ Based on this logic, call the 'creative_director_action' function with your deci
                     result = {
                         'action': 'NEW_ASSET' if action == 'NEW_CREATION' else ('EDIT_ASSET' if action == 'EDIT_IMAGE' else 'ANSWER_QUESTION'),
                         'prompt': args.get('prompt', user_prompt),
-                        'reasoning': args.get('reasoning', '好的，正在为您处理图片请求。')
+                        'reasoning': args.get('reasoning', f'用户想要创建一张新图片，主题是关于{user_prompt}。因此，执行新建创作操作。')
                     }
                     if 'targetImageId' in args:
                         result['targetAssetId'] = args['targetImageId']
@@ -386,7 +394,7 @@ Based on this logic, call the 'creative_director_action' function with your deci
             result = {
                 'action': 'NEW_ASSET',
                 'prompt': user_prompt,
-                'reasoning': '好的，正在为您创作一张关于"{user_prompt}"的图片。'
+                'reasoning': f'用户想要创建一张新图片，主题是关于{user_prompt}。因此，执行新建创作操作。'
             }
             duration = time.time() - start_time
             print(f"[API] ✅ Success: {result['action']} (Fallback)")
@@ -924,13 +932,23 @@ Based on the user's idea, generate three distinct "Video Concept Cards" that tel
 - **Option B (Creative/Stylized)**: Focus on unique art styles, animation (e.g., claymation, cyber-anime), or surreal visuals.
 - **Option C (Dynamic/Action)**: Focus on speed, intense motion, fast cuts, and visual impact.
 
-For each card, provide:
-1. `title`: A short, catchy title (e.g., "Neon Drift: Cyberpunk").
-2. `description`: A one-sentence summary of the narrative and visual mood.
-3. `tags`: An array of 3-4 relevant keyword tags.
-4. `fullPrompt`: A comprehensive, detailed prompt using the VEO Golden Rules above{" and Brand DNA guidelines" if brand_context else ""}.
+You must return a valid JSON array of objects."""
+            
+            # 视频模型专用 user_content
+            user_content = f"""
+The user's idea is: "{prompt}"
+{brand_context if brand_context else ""}
 
-IMPORTANT: Detect the language of the user's idea (it will be either Chinese or English). You MUST generate all content for the cards (titles, descriptions, tags, and full prompts) in that SAME language (or Chinese mixed with English technical terms if the input is Chinese).
+Based on this idea, generate three distinct "Video Concept Cards" that tell a story. For each card, provide:
+
+1. `title`: A short, catchy title **in Simplified Chinese** (e.g., "精准与优雅", "活力与真实", NOT "Precision and Elegance" or "Neon Drift: Cyberpunk").
+2. `description`: A one-sentence summary of the narrative and visual mood **in Simplified Chinese**.
+3. `tags`: An array of 3-4 relevant keyword tags **in Simplified Chinese**.
+4. `fullPrompt`: A comprehensive, detailed prompt using the VEO Golden Rules above{" and Brand DNA guidelines" if brand_context else ""}. **MUST BE IN ENGLISH** for optimal video generation.
+
+CRITICAL LANGUAGE REQUIREMENT:
+- The UI display fields (title, description, tags) MUST be in **Simplified Chinese**, regardless of the user's input language.
+- The generation field (fullPrompt) MUST be in **English** for optimal video generation results.
 
 Your entire output must be a single, valid JSON array adhering to this TypeScript interface:
 ```typescript
@@ -944,18 +962,20 @@ interface EnhancedPrompt {{
         else:
             # 图片提示词优化
             system_instruction = f"""You are an expert AI Art Director. Your task is to transform a user's basic idea into three distinct, professional creative directions. You must return a valid JSON array of objects.{brand_context}"""
-        
-        user_content = f"""
+            
+            # 图片模型专用 user_content
+            user_content = f"""
 The user's idea is: "{prompt}"
 {brand_context if brand_context else ""}
 
 Based on this idea, generate three distinct "Prompt Optimization Cards". For each card, provide:
-1. `title`: A short, catchy title for the creative direction (e.g., "Cinematic Portrait", "Retro Anime Style").
-2. `description`: A one-sentence summary of the style and mood.
-3. `tags`: An array of 3-4 relevant keyword tags (e.g., ["close-up", "golden hour", "shallow depth of field"]).
-4. `fullPrompt`: A complete, detailed, and enhanced prompt for the 'gemini-2.5-flash-image' model that fully realizes the creative direction.
 
-IMPORTANT: Detect the language of the user's idea (it will be either Chinese or English). You MUST generate all content for the cards (titles, descriptions, tags, and full prompts) in that SAME language.
+1. `title`: A short, catchy title for the creative direction **in Simplified Chinese** (e.g., "精准与优雅", "活力与真实", NOT "Cinematic Portrait" or "Retro Anime Style").
+2. `description`: A one-sentence summary of the style and mood **in Simplified Chinese**.
+3. `tags`: An array of 3-4 relevant keyword tags **in Simplified Chinese** (e.g., ["特写", "黄金时刻", "浅景深"], NOT ["close-up", "golden hour", "shallow depth of field"]).
+4. `fullPrompt`: A complete, detailed, and enhanced prompt for the 'gemini-2.5-flash-image' model that fully realizes the creative direction. **MUST BE IN ENGLISH**.
+
+IMPORTANT: The UI fields (title, description, tags) MUST be in **Simplified Chinese**. The generation field (fullPrompt) MUST be in **English**.
 
 Your entire output must be a single, valid JSON array adhering to this TypeScript interface:
 ```typescript
@@ -965,16 +985,16 @@ interface EnhancedPrompt {{
   tags: string[];
   fullPrompt: string;
 }}
-```
-"""
+```"""
         
         response = gemini.generate_content(user_content, model='gemini-2.5-flash', system_instruction=system_instruction)
         text = safe_get_text(response)
         
+        # Fallback 结果：UI字段使用中文，fullPrompt保持原样（用于生成）
         fallback_result = [{
-            "title": "Original Prompt",
-            "description": "Your original idea, ready to generate.",
-            "tags": ["user-provided"],
+            "title": "原始提示词",
+            "description": "您的原始创意，可以直接生成。",
+            "tags": ["用户提供"],
             "fullPrompt": prompt
         }]
         

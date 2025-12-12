@@ -243,6 +243,38 @@ export const useReelGeneration = (initialPrompt: string, userProfile: UserProfil
             newAsset.x = x;
             newAsset.y = y;
 
+            // Save to Gallery & Deduct Credits (for videos)
+            if (newAsset.type === 'video' && auth.currentUser) {
+                try {
+                    // Calculate cost based on model
+                    const cost = modelToUse === 'veo_gen' ? 50 : 35;
+                    
+                    // Check credits before saving
+                    if (userProfile.credits < cost) {
+                        console.warn(`Insufficient credits: ${userProfile.credits} < ${cost}`);
+                        // Still save to gallery, but don't deduct credits
+                    } else {
+                        // Save to Firestore Gallery
+                        await saveGalleryItem(auth.currentUser.uid, {
+                            fileUrl: newAsset.src,
+                            prompt: newAsset.prompt,
+                            width: newAsset.width,
+                            height: newAsset.height,
+                            aspectRatio: '9:16',
+                            model: newAsset.generationModel,
+                            type: 'video'
+                        });
+                        
+                        // Deduct credits
+                        await deductUserCredits(auth.currentUser.uid, cost);
+                        console.log(`[Gallery] Video saved and ${cost} credits deducted`);
+                    }
+                } catch (e) {
+                    console.error("Failed to save video to gallery or deduct credits:", e);
+                    // Continue execution even if save fails
+                }
+            }
+
             // Update State
             setAssets(prev => ({ ...prev, [newAsset.id]: newAsset }));
             addMessage('assistant', 'generated-asset', { assetId: newAsset.id });

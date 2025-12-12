@@ -172,6 +172,7 @@ export async function getReelCreativeDirectorAction(
     targetAssetId?: string;
     suggestedModel?: string;
 }> {
+    // 创意总监需要调用 Gemini API，可能需要较长时间，设置 60 秒超时
     return apiRequest('/api/reel/creative-director', {
         method: 'POST',
         body: JSON.stringify({
@@ -183,7 +184,7 @@ export async function getReelCreativeDirectorAction(
             messages,
             hasUploadedFiles,
         }),
-    });
+    }, 3, 90000); // 90 秒超时
 }
 
 /**
