@@ -244,8 +244,10 @@ cd test
 - ✅ Firebase Storage 集成（视频资源管理）
 - ✅ Cloud Run 部署支持（Docker 容器化）
 - ✅ UI 样式统一（所有输入框统一为 Google AI Studio 蓝色主题）
+- ✅ Firebase 集成统一（统一的保存逻辑和错误处理）
+- ✅ 创作档案实时更新（Firestore 实时订阅和优化查询）
 
-### UI 改进 (最新)
+### UI 改进
 - **输入框样式统一**：ReelChatSidebar 输入框样式已与 ImageChatSidebar 和 VideoChatSidebar 完全一致
   - ✅ 使用 indigo/blue 主题（与 Google AI Studio 100% 一致）
   - ✅ 统一的焦点状态（`focus-within:border-indigo-300`、`focus-within:ring-indigo-100`）
@@ -254,6 +256,24 @@ cd test
   - ✅ 提示选项按钮样式统一（边框、左侧竖线、标签颜色均为 indigo）
   - ✅ 设计计划按钮样式统一（背景和文字颜色为 indigo）
   - ✅ textarea 增强（添加 `placeholder-slate-400` 和 `focus:outline-none`）
+- **工具栏布局优化**：图片编辑工具栏按钮（HD、抠图、重绘、下载）确保单行显示
+
+### Firebase 集成优化 (最新)
+- **统一保存逻辑**：
+  - ✅ 所有生成操作（图片、视频）统一使用 `useReelGeneration` hook 保存
+  - ✅ 图片处理操作（高清放大、背景去除）自动保存到创作档案
+  - ✅ 统一的用户 ID 验证（`userProfile.uid` 优先，`auth.currentUser.uid` 备用）
+  - ✅ 详细的错误处理和用户可见的状态提示
+- **创作档案实时更新**：
+  - ✅ Firestore 实时订阅，自动同步最新生成的素材
+  - ✅ 优化查询逻辑（支持复合索引，fallback 查询获取更多文档）
+  - ✅ 客户端排序确保最新内容显示在最上方
+  - ✅ 详细的日志记录便于调试
+- **Storage 安全规则**：
+  - ✅ 支持认证用户读写 `reel-images/{userId}/` 路径
+  - ✅ 兼容现有的 `users/{uid}/` 路径规则
+- **Firestore 索引**：
+  - ✅ 配置 `gallery` 集合复合索引（`uid` + `createdAt`）提升查询性能
 
 ## 🤝 贡献
 

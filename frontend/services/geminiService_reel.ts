@@ -6,9 +6,10 @@ import { generateImage, getCreativeDirectorAction, enhancePrompt as enhanceImage
 // 如果 geminiService_reel.ts 仍在使用，需要更新为使用 videoService
 import { generateVideo, getVideoCreativeDirectorAction, enhancePrompt as enhanceVideoPrompt, getDesignPlan as getVideoDesignPlan } from './videoService';
 // persistVideoToStorage 已由后端处理，不再需要前端实现
-import { uploadImageToStorage, saveGalleryItem } from './galleryService';
-import { deductUserCredits } from './userService';
-import { auth } from '../firebaseConfig';
+// Note: Gallery saving is now handled in hooks (useReelGeneration.ts)
+// import { uploadImageToStorage, saveGalleryItem } from './galleryService';
+// import { deductUserCredits } from './userService';
+// import { auth } from '../firebaseConfig';
 import { ReelMessage, ReelAsset } from '../types';
 
 // Helper: Determine if the selected model is for video
@@ -224,19 +225,8 @@ export const generateReelAsset = async (
         // 注意：后端已处理视频持久化，videoUri 已经是永久 URL
         const persistentUrl = videoUri;
         
-        // Save & Deduct
-        if (auth.currentUser) {
-            await saveGalleryItem(auth.currentUser.uid, {
-                fileUrl: persistentUrl,
-                prompt,
-                width: 512, // Updated to match image dimensions
-                height: 896, // Updated to match image dimensions
-                aspectRatio,
-                model,
-                type: 'video'
-            });
-            await deductUserCredits(auth.currentUser.uid, cost);
-        }
+        // Note: Saving to gallery is now handled in the hook (useReelGeneration.ts)
+        // to avoid duplicate saves and ensure consistent error handling
 
         return {
             id: `reel-vid-${Date.now()}`,
@@ -261,48 +251,21 @@ export const generateReelAsset = async (
             model as 'banana' | 'banana_pro'
         );
 
-        // Upload to Storage
-        if (auth.currentUser) {
-            const downloadUrl = await uploadImageToStorage(auth.currentUser.uid, result.base64Image);
-            
-            await saveGalleryItem(auth.currentUser.uid, {
-                fileUrl: downloadUrl,
-                prompt,
-                width: 512, // Default vertical
-                height: 896,
-                aspectRatio,
-                model,
-                type: 'image'
-            });
-            await deductUserCredits(auth.currentUser.uid, cost);
-
-            return {
-                id: `reel-img-${Date.now()}`,
-                type: 'image',
-                src: downloadUrl, // Use cloud URL for consistency
-                prompt,
-                width: 512,
-                height: 896,
-                x: 0, y: 0,
-                status: 'done',
-                generationModel: model,
-                sourceAssetId: sourceAsset?.id // CRITICAL: Propagate source ID for connection lines
-            };
-        } else {
-            // Guest mode (base64)
-             return {
-                id: `reel-img-${Date.now()}`,
-                type: 'image',
-                src: `data:image/jpeg;base64,${result.base64Image}`,
-                prompt,
-                width: 512,
-                height: 896,
-                x: 0, y: 0,
-                status: 'done',
-                generationModel: model,
-                sourceAssetId: sourceAsset?.id // CRITICAL: Propagate source ID for connection lines
-            };
-        }
+        // Note: Saving to gallery is now handled in the hook (useReelGeneration.ts)
+        // to avoid duplicate saves and ensure consistent error handling
+        // Return base64 data URI for hook to process
+        return {
+            id: `reel-img-${Date.now()}`,
+            type: 'image',
+            src: `data:image/jpeg;base64,${result.base64Image}`,
+            prompt,
+            width: 512,
+            height: 896,
+            x: 0, y: 0,
+            status: 'done',
+            generationModel: model,
+            sourceAssetId: sourceAsset?.id // CRITICAL: Propagate source ID for connection lines
+        };
     }
 };
 

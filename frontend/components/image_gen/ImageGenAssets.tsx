@@ -284,7 +284,7 @@ export const EditorToolbar: React.FC<{
                 <button 
                     onClick={() => setIsMenuOpen(prev => !prev)} 
                     disabled={isUpscaling || isAlreadyHD} 
-                    className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 rounded-full px-3 h-7 hover:bg-slate-100 disabled:text-slate-400 disabled:bg-transparent disabled:cursor-not-allowed transition-colors"
+                    className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 rounded-full px-3 h-7 hover:bg-slate-100 disabled:text-slate-400 disabled:bg-transparent disabled:cursor-not-allowed transition-colors whitespace-nowrap"
                     title={isAlreadyHD ? "图片已是高清画质，无需放大" : "提升画质"}
                 >
                     {isUpscaling ? (
@@ -321,7 +321,7 @@ export const EditorToolbar: React.FC<{
             <button 
                 onClick={onRemoveBackground}
                 disabled={isGenerating}
-                className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 rounded-full px-3 h-7 hover:bg-slate-100 disabled:text-slate-400 disabled:bg-transparent disabled:cursor-not-allowed transition-colors"
+                className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 rounded-full px-3 h-7 hover:bg-slate-100 disabled:text-slate-400 disabled:bg-transparent disabled:cursor-not-allowed transition-colors whitespace-nowrap"
                 title="智能去除背景"
             >
                 {processingAction === 'remove-bg' ? (
@@ -337,7 +337,7 @@ export const EditorToolbar: React.FC<{
             <button 
                 onClick={onRegenerate}
                 disabled={isGenerating}
-                className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 rounded-full px-3 h-7 hover:bg-slate-100 disabled:text-slate-400 disabled:bg-transparent disabled:cursor-not-allowed transition-colors"
+                className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 rounded-full px-3 h-7 hover:bg-slate-100 disabled:text-slate-400 disabled:bg-transparent disabled:cursor-not-allowed transition-colors whitespace-nowrap"
                 title="使用当前设置再次生成"
             >
                  {processingAction === 'regenerate' ? (
@@ -349,7 +349,7 @@ export const EditorToolbar: React.FC<{
             </button>
 
             <div className="w-px h-4 bg-slate-200" />
-            <button onClick={onDownload} className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 rounded-full px-3 h-7 hover:bg-slate-100"><ArrowDownTrayIcon className="w-3.5 h-3.5" /><span>下载</span></button>
+            <button onClick={onDownload} className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 rounded-full px-3 h-7 hover:bg-slate-100 whitespace-nowrap"><ArrowDownTrayIcon className="w-3.5 h-3.5" /><span>下载</span></button>
         </div>
     );
 };

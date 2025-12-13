@@ -115,11 +115,92 @@ export const useReelGeneration = (initialPrompt: string, userProfile: UserProfil
 
         let unsubscribe: (() => void) | undefined;
         const subAuth = auth.onAuthStateChanged((user) => {
-            if (unsubscribe) unsubscribe();
+            console.log('[Reel] 🔐 Auth state changed:', {
+                hasUser: !!user,
+                userId: user?.uid || 'N/A'
+            });
+            
+            if (unsubscribe) {
+                console.log('[Reel] 🔄 Unsubscribing previous gallery subscription');
+                unsubscribe();
+            }
+            
             if (user) {
+                console.log('[Reel] ✅ User authenticated, subscribing to gallery for userId:', user.uid);
                 unsubscribe = subscribeToGallery(user.uid, (items) => {
-                    // Filter for 9:16 content if possible, or just show everything but prioritize vertical
-                    setGalleryItems(items.filter(i => i.aspectRatio === '9:16' || !i.aspectRatio)); 
+                    console.log('[Reel] 🔔 Gallery subscription update:', {
+                        totalItems: items.length,
+                        userId: user.uid,
+                        items: items.map(i => ({
+                            id: i.id,
+                            type: i.type,
+                            aspectRatio: i.aspectRatio,
+                            hasFileUrl: !!i.fileUrl,
+                            prompt: i.prompt?.substring(0, 30) + '...',
+                            createdAt: i.createdAt ? (typeof i.createdAt.toMillis === 'function' ? new Date(i.createdAt.toMillis()).toISOString() : i.createdAt.toString()) : 'N/A'
+                        }))
+                    });
+                    
+                    // 临时放宽过滤条件：显示所有类型为 image 或 video 的项目
+                    // 用于调试，确认数据是否已保存
+                    const filteredItems = items.filter(i => {
+                        // 必须是指定的类型
+                        const isReelType = i.type === 'image' || i.type === 'video';
+                        if (!isReelType) {
+                            console.log('[Reel] ⚠️ Filtered out item (wrong type):', {
+                                id: i.id,
+                                type: i.type,
+                                allFields: Object.keys(i)
+                            });
+                            return false;
+                        }
+                        
+                        // 临时：显示所有 aspectRatio 的项目（用于调试）
+                        // 之后可以恢复为只显示 9:16 或为空的项目
+                        const hasAspectRatio = i.aspectRatio !== undefined && i.aspectRatio !== null;
+                        const is916 = i.aspectRatio === '9:16';
+                        const isEmpty = !hasAspectRatio;
+                        
+                        // 临时放宽：显示所有 aspectRatio 的项目
+                        const shouldInclude = true; // 临时：显示所有项目
+                        // const shouldInclude = is916 || isEmpty; // 恢复后使用这行
+                        
+                        if (!shouldInclude) {
+                            console.log('[Reel] ⚠️ Filtered out item (wrong aspectRatio):', {
+                                id: i.id,
+                                type: i.type,
+                                aspectRatio: i.aspectRatio
+                            });
+                        }
+                        
+                        return shouldInclude;
+                    });
+                    
+                    console.log('[Reel] ✅ Filtered gallery items:', {
+                        originalCount: items.length,
+                        filteredCount: filteredItems.length,
+                        filtered: filteredItems.map(i => ({
+                            id: i.id,
+                            type: i.type,
+                            aspectRatio: i.aspectRatio,
+                            hasFileUrl: !!i.fileUrl,
+                            prompt: i.prompt?.substring(0, 30) + '...'
+                        }))
+                    });
+                    
+                    // 如果过滤后的数量为 0 但原始数量 > 0，说明有项目被过滤
+                    if (items.length > 0 && filteredItems.length === 0) {
+                        console.warn('[Reel] ⚠️ WARNING: All items were filtered out!', {
+                            totalItems: items.length,
+                            items: items.map(i => ({
+                                id: i.id,
+                                type: i.type,
+                                aspectRatio: i.aspectRatio
+                            }))
+                        });
+                    }
+                    
+                    setGalleryItems(filteredItems);
                 });
             } else {
                 setGalleryItems([]);
@@ -243,35 +324,165 @@ export const useReelGeneration = (initialPrompt: string, userProfile: UserProfil
             newAsset.x = x;
             newAsset.y = y;
 
-            // Save to Gallery & Deduct Credits (for videos)
-            if (newAsset.type === 'video' && auth.currentUser) {
-                try {
-                    // Calculate cost based on model
-                    const cost = modelToUse === 'veo_gen' ? 50 : 35;
-                    
-                    // Check credits before saving
-                    if (userProfile.credits < cost) {
-                        console.warn(`Insufficient credits: ${userProfile.credits} < ${cost}`);
-                        // Still save to gallery, but don't deduct credits
+            // Save to Gallery & Deduct Credits
+            // For images: extract base64 from data URI, upload to Storage, then save to gallery (async, non-blocking)
+            // For videos: backend already handles persistence, just save metadata to gallery
+            
+            // 使用 userProfile 或 auth.currentUser 作为备用，确保有用户ID
+            const currentUid = (userProfile?.uid || auth.currentUser?.uid);
+            
+            console.log('[Reel] 📋 User ID verification before save:', {
+                userProfileUid: userProfile?.uid || 'N/A',
+                authCurrentUserUid: auth.currentUser?.uid || 'N/A',
+                selectedUid: currentUid || 'N/A',
+                match: userProfile?.uid === auth.currentUser?.uid
+            });
+            
+            if (currentUid) {
+                console.log('[Reel] Starting gallery save process', {
+                    hasUserProfile: !!userProfile,
+                    hasAuthUser: !!auth.currentUser,
+                    userId: currentUid,
+                    assetType: newAsset.type,
+                    assetId: newAsset.id,
+                    assetSrcFormat: newAsset.src.startsWith('data:') ? 'base64' : 'url',
+                    assetSrcPreview: newAsset.src.substring(0, 80) + '...'
+                });
+                
+                if (newAsset.type === 'image') {
+                    // Extract base64 from data URI
+                    if (newAsset.src.startsWith('data:image')) {
+                        const base64Match = newAsset.src.match(/data:image\/[^;]+;base64,(.+)/);
+                        if (base64Match && base64Match[1]) {
+                            const base64Image = base64Match[1];
+                            
+                            // Calculate cost based on model
+                            const cost = modelToUse === 'banana_pro' ? 20 : 10;
+                            
+                            // 添加保存开始提示（用户可见）
+                            addMessage('assistant', 'text', '💾 正在保存到创作档案...');
+                            
+                            console.log('[Reel] Extracted base64 image, length:', base64Image.length);
+                            
+                            // Async upload and save (non-blocking)
+                            uploadImageToStorage(currentUid, base64Image)
+                                .then(async (downloadUrl) => {
+                                    console.log('[Reel] ✅ Image uploaded to Storage:', downloadUrl.substring(0, 80) + '...');
+                                    
+                                    // Update asset src to use cloud URL
+                                    setAssets(prev => ({
+                                        ...prev,
+                                        [newAsset.id]: { ...prev[newAsset.id], src: downloadUrl }
+                                    }));
+                                    
+                                    const galleryItemData = {
+                                        fileUrl: downloadUrl,
+                                        prompt: newAsset.prompt,
+                                        width: newAsset.width,
+                                        height: newAsset.height,
+                                        aspectRatio: '9:16' as const,
+                                        model: newAsset.generationModel || modelToUse,
+                                        type: 'image' as const
+                                    };
+                                    
+                                    console.log('[Reel] Saving gallery item to Firestore:', galleryItemData);
+                                    
+                                    // 保存到 Firestore
+                                    try {
+                                        await saveGalleryItem(currentUid, galleryItemData);
+                                        console.log('[Reel] ✅ Gallery item saved to Firestore');
+                                        
+                                        // 验证保存是否成功（可选，用于调试）
+                                        // 可以添加一个查询来确认文档已创建
+                                        
+                                        await deductUserCredits(currentUid, cost);
+                                        console.log(`[Reel] ✅ ${cost} credits deducted`);
+                                        
+                                        // 添加保存成功提示（用户可见）
+                                        addMessage('assistant', 'text', '✅ 已保存到创作档案');
+                                    } catch (saveError: any) {
+                                        console.error('[Reel] ❌ Firestore save failed:', saveError);
+                                        console.error('[Reel] Save error details:', {
+                                            code: saveError.code,
+                                            message: saveError.message,
+                                            stack: saveError.stack
+                                        });
+                                        // 即使 Firestore 保存失败，Storage 已上传成功
+                                        addMessage('assistant', 'text', `⚠️ 元数据保存失败: ${saveError.message || '未知错误'}，但文件已上传`);
+                                        throw saveError; // 重新抛出以便外层 catch 处理
+                                    }
+                                })
+                                .catch(err => {
+                                    console.error(`[Reel] ❌ Post-generation image save FAILED:`, err);
+                                    console.error('[Reel] Error details:', {
+                                        message: err.message,
+                                        stack: err.stack,
+                                        name: err.name
+                                    });
+                                    // 添加保存失败提示（用户可见）
+                                    addMessage('assistant', 'text', `⚠️ 保存到创作档案失败: ${err.message || '未知错误，请查看控制台'}`);
+                                });
+                        } else {
+                            console.warn('[Reel] ⚠️ Failed to extract base64 from data URI');
+                            console.warn('[Reel] Data URI format:', newAsset.src.substring(0, 100));
+                            addMessage('assistant', 'text', '⚠️ 图片格式异常，无法保存到创作档案');
+                        }
                     } else {
-                        // Save to Firestore Gallery
-                        await saveGalleryItem(auth.currentUser.uid, {
-                            fileUrl: newAsset.src,
-                            prompt: newAsset.prompt,
-                            width: newAsset.width,
-                            height: newAsset.height,
-                            aspectRatio: '9:16',
-                            model: newAsset.generationModel,
-                            type: 'video'
-                        });
-                        
-                        // Deduct credits
-                        await deductUserCredits(auth.currentUser.uid, cost);
-                        console.log(`[Gallery] Video saved and ${cost} credits deducted`);
+                        console.warn('[Reel] ⚠️ Asset src is not a data URI, may already be saved:', newAsset.src.substring(0, 80));
+                        // 如果已经是 cloud URL，可能已经保存过了，但仍然尝试保存元数据
+                        if (newAsset.src.startsWith('http')) {
+                            console.log('[Reel] Asset is already a cloud URL, saving metadata only...');
+                            addMessage('assistant', 'text', '💾 正在保存元数据到创作档案...');
+                            
+                            saveGalleryItem(currentUid, {
+                                fileUrl: newAsset.src,
+                                prompt: newAsset.prompt,
+                                width: newAsset.width,
+                                height: newAsset.height,
+                                aspectRatio: '9:16',
+                                model: newAsset.generationModel || modelToUse,
+                                type: 'image'
+                            })
+                                .then(() => {
+                                    console.log('[Reel] ✅ Metadata saved');
+                                    addMessage('assistant', 'text', '✅ 已保存到创作档案');
+                                })
+                                .catch(err => {
+                                    console.error('[Reel] ❌ Metadata save failed:', err);
+                                    addMessage('assistant', 'text', `⚠️ 保存失败: ${err.message || '未知错误'}`);
+                                });
+                        }
                     }
-                } catch (e) {
-                    console.error("Failed to save video to gallery or deduct credits:", e);
-                    // Continue execution even if save fails
+                } else if (newAsset.type === 'video') {
+                    // Video: backend already handles persistence, just save metadata
+                    try {
+                        // Calculate cost based on model
+                        const cost = modelToUse === 'veo_gen' ? 50 : 35;
+                        
+                        // Check credits before saving
+                        if (userProfile.credits < cost) {
+                            console.warn(`Insufficient credits: ${userProfile.credits} < ${cost}`);
+                            // Still save to gallery, but don't deduct credits
+                        } else {
+                            // Save to Firestore Gallery
+                            await saveGalleryItem(currentUid, {
+                                fileUrl: newAsset.src,
+                                prompt: newAsset.prompt,
+                                width: newAsset.width,
+                                height: newAsset.height,
+                                aspectRatio: '9:16',
+                                model: newAsset.generationModel,
+                                type: 'video'
+                            });
+                            
+                            // Deduct credits
+                            await deductUserCredits(currentUid, cost);
+                            console.log(`[Gallery] Video saved and ${cost} credits deducted`);
+                        }
+                    } catch (e) {
+                        console.error("Failed to save video to gallery or deduct credits:", e);
+                        // Continue execution even if save fails
+                    }
                 }
             }
 
@@ -621,22 +832,8 @@ export const useReelGeneration = (initialPrompt: string, userProfile: UserProfil
             const newAssetId = `reel-img-hd-${Date.now()}`;
             const { x, y } = calculateNewPosition(asset.id, assets);
             
-            // Upload to storage for persistence
+            // Upload to storage for persistence (async, non-blocking)
             let downloadUrl = `data:image/jpeg;base64,${result.base64Image}`;
-            if (auth.currentUser) {
-                downloadUrl = await uploadImageToStorage(auth.currentUser.uid, result.base64Image);
-                await saveGalleryItem(auth.currentUser.uid, {
-                    fileUrl: downloadUrl,
-                    prompt: asset.prompt,
-                    width: asset.width,
-                    height: asset.height,
-                    aspectRatio: '9:16',
-                    type: 'image',
-                    model: 'gemini-3-pro-image-preview'
-                });
-                await deductUserCredits(auth.currentUser.uid, 20); // Upscale cost
-            }
-
             const newAsset: ReelAsset = {
                 id: newAssetId,
                 type: 'image',
@@ -654,6 +851,40 @@ export const useReelGeneration = (initialPrompt: string, userProfile: UserProfil
             setAssets(prev => ({ ...prev, [newAssetId]: newAsset }));
             addMessage('assistant', 'generated-asset', { assetId: newAssetId });
             setSelectedAssetId(newAssetId);
+            
+            // Upload to Storage and save to Gallery (async, non-blocking)
+            const currentUid = (userProfile?.uid || auth.currentUser?.uid);
+            if (currentUid) {
+                addMessage('assistant', 'text', '💾 正在保存到创作档案...');
+                uploadImageToStorage(currentUid, result.base64Image)
+                    .then(async (cloudUrl) => {
+                        console.log('[Reel] ✅ Upscale: Image uploaded to Storage');
+                        // Update asset src to use cloud URL
+                        setAssets(prev => ({
+                            ...prev,
+                            [newAssetId]: { ...prev[newAssetId], src: cloudUrl }
+                        }));
+                        
+                        await saveGalleryItem(currentUid, {
+                            fileUrl: cloudUrl,
+                            prompt: asset.prompt,
+                            width: asset.width,
+                            height: asset.height,
+                            aspectRatio: '9:16',
+                            type: 'image',
+                            model: asset.generationModel || 'gemini-3-pro-image-preview'
+                        });
+                        await deductUserCredits(currentUid, 20); // Upscale cost
+                        console.log(`[Reel] ✅ Upscale: Image saved to gallery and 20 credits deducted`);
+                        addMessage('assistant', 'text', '✅ 已保存到创作档案');
+                    })
+                    .catch(err => {
+                        console.error(`[Reel] ❌ Upscale save FAILED:`, err);
+                        addMessage('assistant', 'text', `⚠️ 保存失败: ${err.message || '未知错误'}`);
+                    });
+            } else {
+                console.warn('[Reel] ⚠️ Cannot save upscale: no user ID available');
+            }
 
         } catch (e: any) {
             console.error("Upscale failed:", e);
@@ -695,6 +926,40 @@ export const useReelGeneration = (initialPrompt: string, userProfile: UserProfil
             setAssets(prev => ({ ...prev, [newAssetId]: newAsset }));
             addMessage('assistant', 'generated-asset', { assetId: newAssetId });
             setSelectedAssetId(newAssetId);
+            
+            // Upload to Storage and save to Gallery (async, non-blocking)
+            const currentUid = (userProfile?.uid || auth.currentUser?.uid);
+            if (currentUid) {
+                addMessage('assistant', 'text', '💾 正在保存到创作档案...');
+                uploadImageToStorage(currentUid, result.base64Image)
+                    .then(async (cloudUrl) => {
+                        console.log('[Reel] ✅ Upscale: Image uploaded to Storage');
+                        // Update asset src to use cloud URL
+                        setAssets(prev => ({
+                            ...prev,
+                            [newAssetId]: { ...prev[newAssetId], src: cloudUrl }
+                        }));
+                        
+                        await saveGalleryItem(currentUid, {
+                            fileUrl: cloudUrl,
+                            prompt: asset.prompt,
+                            width: asset.width,
+                            height: asset.height,
+                            aspectRatio: '9:16',
+                            type: 'image',
+                            model: asset.generationModel || 'gemini-3-pro-image-preview'
+                        });
+                        await deductUserCredits(currentUid, 10); // Remove BG cost (estimated)
+                        console.log(`[Reel] ✅ Upscale: Image saved to gallery and 10 credits deducted`);
+                        addMessage('assistant', 'text', '✅ 已保存到创作档案');
+                    })
+                    .catch(err => {
+                        console.error(`[Reel] ❌ Upscale save FAILED:`, err);
+                        addMessage('assistant', 'text', `⚠️ 保存失败: ${err.message || '未知错误'}`);
+                    });
+            } else {
+                console.warn('[Reel] ⚠️ Cannot save upscale: no user ID available');
+            }
 
         } catch (e: any) {
             console.error("Remove BG failed:", e);

@@ -211,9 +211,9 @@ export const useVideoGeneration = (initialPrompt: string, userProfile: UserProfi
             
             // Step 3: Save Metadata to Firestore Gallery & Deduct Credits
             // 注意：后端已处理视频持久化，videoUri 已经是永久 URL
-            if (auth.currentUser) {
+            if (userProfile && userProfile.uid) {
                 try {
-                    await saveGalleryItem(auth.currentUser.uid, {
+                    await saveGalleryItem(userProfile.uid, {
                         fileUrl: videoUri,
                         prompt: prompt,
                         width,
@@ -222,7 +222,7 @@ export const useVideoGeneration = (initialPrompt: string, userProfile: UserProfi
                         model: modelToUse,
                         type: 'video' 
                     });
-                    await deductUserCredits(auth.currentUser.uid, cost);
+                    await deductUserCredits(userProfile.uid, cost);
                 } catch (e) {
                     console.error("Failed to save video metadata or deduct credits:", e);
                 }

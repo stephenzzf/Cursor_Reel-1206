@@ -329,8 +329,8 @@ export const useImageGeneration = (initialPrompt: string, userProfile: UserProfi
             }
 
             // 3. Cloud Persistence & CREDIT DEDUCTION
-            if (auth.currentUser) {
-                const currentUid = auth.currentUser.uid;
+            if (userProfile && userProfile.uid) {
+                const currentUid = userProfile.uid;
                 
                 uploadImageToStorage(currentUid, result.base64Image)
                     .then(async (downloadUrl) => {
@@ -863,7 +863,38 @@ export const useImageGeneration = (initialPrompt: string, userProfile: UserProfi
             setImages(prev => ({ ...prev, [imageId]: newImage })); 
             addMessage('assistant', 'generated-image', { imageId, alt: newImage.alt }); 
             setLastGeneratedImageId(imageId); 
-            setSelectedImageId(imageId); 
+            setSelectedImageId(imageId);
+            
+            // Upload to Storage and save to Gallery (async, non-blocking)
+            if (userProfile && userProfile.uid) {
+                const currentUid = userProfile.uid;
+                uploadImageToStorage(currentUid, result.base64Image)
+                    .then(async (downloadUrl) => {
+                        // Update image src to use cloud URL
+                        setImages(prev => ({
+                            ...prev,
+                            [imageId]: { ...prev[imageId], src: downloadUrl }
+                        }));
+                        
+                        // Calculate aspect ratio from image dimensions
+                        const calculatedAspectRatio = getClosestAspectRatio(realWidth, realHeight);
+                        
+                        await saveGalleryItem(currentUid, {
+                            fileUrl: downloadUrl,
+                            prompt: newImage.alt,
+                            width: realWidth,
+                            height: realHeight,
+                            aspectRatio: calculatedAspectRatio,
+                            model: 'gemini-3-pro-image-preview',
+                            type: 'image'
+                        });
+                        await deductUserCredits(currentUid, 20); // Upscale cost
+                        console.log(`[Gallery] Upscaled image saved and 20 credits deducted`);
+                    })
+                    .catch(err => {
+                        console.error(`[ImageGen] Upscale save FAILED:`, err);
+                    });
+            }
         } catch (error) { 
             console.error("Image upscale failed:", error); 
             const errorMessage = error instanceof Error ? error.message : '未知错误';
@@ -901,6 +932,37 @@ export const useImageGeneration = (initialPrompt: string, userProfile: UserProfi
             addMessage('assistant', 'generated-image', { imageId, alt: newImage.alt });
             setLastGeneratedImageId(imageId);
             setSelectedImageId(imageId);
+            
+            // Upload to Storage and save to Gallery (async, non-blocking)
+            if (userProfile && userProfile.uid) {
+                const currentUid = userProfile.uid;
+                uploadImageToStorage(currentUid, result.base64Image)
+                    .then(async (downloadUrl) => {
+                        // Update image src to use cloud URL
+                        setImages(prev => ({
+                            ...prev,
+                            [imageId]: { ...prev[imageId], src: downloadUrl }
+                        }));
+                        
+                        // Calculate aspect ratio from image dimensions
+                        const calculatedAspectRatio = getClosestAspectRatio(width, height);
+                        
+                        await saveGalleryItem(currentUid, {
+                            fileUrl: downloadUrl,
+                            prompt: newImage.alt,
+                            width: width,
+                            height: height,
+                            aspectRatio: calculatedAspectRatio,
+                            model: selectedModel,
+                            type: 'image'
+                        });
+                        await deductUserCredits(currentUid, 10); // Remove BG cost (estimated)
+                        console.log(`[Gallery] Remove background image saved and 10 credits deducted`);
+                    })
+                    .catch(err => {
+                        console.error(`[ImageGen] Remove BG save FAILED:`, err);
+                    });
+            }
         } catch (error) {
             console.error("Remove background failed:", error);
             const errorMessage = error instanceof Error ? error.message : '未知错误';
